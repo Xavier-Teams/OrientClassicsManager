@@ -37,4 +37,5 @@ export default defineConfig({
       deny: ["**/.*"],
     },
   },
+  logLevel: 'warn', // Suppress PostCSS warnings
 });

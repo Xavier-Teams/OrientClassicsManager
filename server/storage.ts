@@ -1,7 +1,6 @@
-import { drizzle } from "drizzle-orm/neon-serverless";
-import { Pool } from "@neondatabase/serverless";
 import { eq, and, desc, asc, ilike, sql } from "drizzle-orm";
 import * as schema from "@shared/schema";
+import { db } from "./db";
 import type {
   User,
   InsertUser,
@@ -20,9 +19,6 @@ import type {
   AdministrativeTask,
   InsertAdministrativeTask,
 } from "@shared/schema";
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
-export const db = drizzle(pool, { schema });
 
 export interface IStorage {
   getUsers(): Promise<User[]>;

@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { registerAIRoutes } from "./ai/routes";
 import { 
   insertUserSchema,
   insertWorkSchema,
@@ -574,6 +575,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ============================================================================
+  // AI ROUTES
+  // ============================================================================
+  
+  registerAIRoutes(app);
 
   const httpServer = createServer(app);
 
