@@ -833,3 +833,16 @@ export type InsertWorkflowAuditLog = z.infer<typeof insertWorkflowAuditLogSchema
 
 export type AIInteraction = typeof aiInteractions.$inferSelect;
 export type InsertAIInteraction = z.infer<typeof insertAIInteractionSchema>;
+
+// ============================================================================
+// UPDATE/PATCH SCHEMAS (partial schemas for safe updates)
+// ============================================================================
+
+export const updateUserSchema = insertUserSchema.partial();
+export const updateWorkSchema = insertWorkSchema.partial();
+export const updateContractSchema = insertContractSchema.partial();
+export const updatePaymentSchema = insertPaymentSchema.partial();
+export const updateReviewSchema = insertReviewSchema.partial();
+export const updateReviewCouncilSchema = insertReviewCouncilSchema.partial();
+export const updateEditingTaskSchema = insertEditingTaskSchema.partial();
+export const updateAdministrativeTaskSchema = insertAdministrativeTaskSchema.partial();
