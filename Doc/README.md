@@ -4,12 +4,24 @@ Hệ thống phần mềm quản lý toàn diện cho Dự án Dịch thuật v�
 
 ## 📋 Mục lục
 
+- [Tổng quan](#tổng-quan)
 - [Tính năng](#tính-năng)
 - [Tech Stack](#tech-stack)
-- [Cài đặt](#cài-đặt)
-- [Chạy dự án](#chạy-dự-án)
-- [API Documentation](#api-documentation)
+- [Quick Start](#quick-start)
 - [Cấu trúc dự án](#cấu-trúc-dự-án)
+- [Tài liệu](#tài-liệu)
+
+## 📌 Tổng quan
+
+Dự án được xây dựng như một **phần mềm độc lập**, không phụ thuộc vào Odoo hay bất kỳ framework nào khác. HRMS chỉ được sử dụng như **nguồn tham khảo** để học hỏi workflow và best practices.
+
+### Kiến trúc
+
+- **Backend**: Django 4.2+ REST Framework + Express.js (Node.js)
+- **Frontend**: React 18+ với TypeScript
+- **Database**: PostgreSQL
+- **AI**: OpenAI API integration
+- **Authentication**: JWT
 
 ## ✨ Tính năng
 
@@ -19,125 +31,150 @@ Hệ thống phần mềm quản lý toàn diện cho Dự án Dịch thuật v�
 - ✅ **Biên tập & Xuất bản** - Quản lý quy trình biên tập
 - ✅ **Quản lý Hành chính** - Biểu mẫu và quy trình
 - ✅ **AI Integration** - Smart queries và translation assistant
+- ⏳ **Quản lý Tài liệu** - Document management với workflow routing
+- ⏳ **Dashboard & Analytics** - Thống kê và báo cáo
+- ⏳ **Quản lý Nhân sự** - Employee và department management
 
 ## 🛠️ Tech Stack
 
 ### Backend
-- Python 3.11+
-- Django 4.2+
-- Django REST Framework
-- PostgreSQL
-- Redis
-- Celery
+- **Django 4.2+** với Django REST Framework
+- **Express.js** với TypeScript
+- **PostgreSQL** database
+- **Django FSM** cho workflow management
+- **JWT** authentication
 
 ### Frontend
-- React 18+
-- TypeScript
-- Vite
-- Tailwind CSS
-- React Query
+- **React 18+** với TypeScript
+- **Vite** build tool
+- **Tailwind CSS** + **shadcn/ui**
+- **React Query** cho data fetching
 
-## 📦 Cài đặt
+### AI Integration
+- **OpenAI API** (GPT-4)
+- Smart Query System
+- Translation Assistant
 
-### Backend
+## 🚀 Quick Start
 
-```bash
-# Tạo virtual environment
-python -m venv venv
-
-# Kích hoạt virtual environment
-# Windows
-venv\Scripts\activate
-# Linux/Mac
-source venv/bin/activate
-
-# Cài đặt dependencies
-cd backend
-pip install -r requirements.txt
-
-# Copy file .env
-cp .env.example .env
-# Chỉnh sửa .env với thông tin database của bạn
-
-# Chạy migrations
-python manage.py migrate
-
-# Tạo superuser
-python manage.py createsuperuser
-
-# Chạy server
-python manage.py runserver
-```
-
-### Frontend
+### 1. Setup Backend (Express)
 
 ```bash
-cd frontend
-
-# Cài đặt dependencies
+# Install dependencies
 npm install
 
-# Chạy development server
+# Setup environment
+cp .env.example .env
+# Chỉnh sửa .env với thông tin database
+
+# Push database schema
+npm run db:push
+
+# Seed database (optional)
+npm run db:seed
+
+# Start server
 npm run dev
 ```
 
-## 🚀 Chạy dự án
+Server sẽ chạy tại: **http://localhost:5000**
 
-### Backend
+### 2. Setup Backend (Django)
+
 ```bash
-cd backend
+# Activate virtual environment
+.\venv-django\Scripts\activate  # Windows
+source venv-django/bin/activate  # Linux/Mac
+
+# Navigate to backend-django
+cd backend-django
+
+# Run migrations
+python manage.py migrate
+
+# Create superuser
+python manage.py createsuperuser
+
+# Start server
 python manage.py runserver
 ```
-Backend sẽ chạy tại: http://localhost:8000
 
-### Frontend
+Django server sẽ chạy tại: **http://localhost:8000**
+
+### 3. Setup Frontend
+
 ```bash
-cd frontend
+# Install dependencies
+npm install
+
+# Start dev server
 npm run dev
 ```
-Frontend sẽ chạy tại: http://localhost:5173
 
-## 📚 API Documentation
-
-Sau khi chạy backend, truy cập:
-- Swagger UI: http://localhost:8000/api/docs/
-- ReDoc: http://localhost:8000/api/redoc/
+Frontend sẽ chạy tại: **http://localhost:5173**
 
 ## 📁 Cấu trúc dự án
 
 ```
-.
-├── backend/                 # Django backend
-│   ├── config/             # Django settings
-│   ├── core/               # Core utilities
-│   ├── users/              # User management
-│   ├── works/              # Works management
-│   ├── contracts/          # Contracts & Payments
-│   ├── reviews/            # Reviews & Acceptance
-│   ├── editing/            # Editing & Publication
-│   ├── administration/     # Administration
-│   ├── documents/          # Document management
-│   ├── ai/                 # AI services
-│   └── notifications/      # Notifications
+OrientClassicsManager/
+├── backend-django/      # Django backend
+│   ├── config/         # Django settings
+│   ├── users/         # User management
+│   ├── works/         # Works & Parts management
+│   ├── contracts/     # Contracts management
+│   └── ...
 │
-├── frontend/               # React frontend
+├── server/             # Express backend
+│   ├── ai/            # AI services
+│   ├── routes.ts      # API routes
+│   └── ...
+│
+├── client/            # React frontend
 │   ├── src/
-│   │   ├── components/     # Reusable components
-│   │   ├── features/       # Feature modules
-│   │   ├── hooks/         # Custom hooks
-│   │   ├── services/      # API services
-│   │   └── store/         # State management
-│   └── public/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   └── lib/
+│   └── ...
 │
-└── Doc/                    # Documentation
+├── shared/            # Shared code
+│   └── schema.ts     # Database schema
+│
+└── Doc/              # Documentation
+    ├── README.md     # This file
+    ├── SETUP_GUIDE.md
+    ├── DEVELOPMENT_GUIDE.md
+    └── ...
 ```
 
-## 📝 Tài liệu
+## 📚 Tài liệu
 
-- [Kế hoạch triển khai chi tiết](./KE_HOACH_TRIEN_KHAI_CHI_TIET.md)
-- [Database Schema](./Doc/DATABASE_SCHEMA.md)
-- [API Specification](./Doc/API_SPECIFICATION.md)
-- [Django Setup Guide](./Doc/DJANGO_SETUP_GUIDE.md)
+### Hướng dẫn Setup
+- [SETUP_GUIDE.md](./SETUP_GUIDE.md) - Hướng dẫn setup chi tiết
+
+### Hướng dẫn Phát triển
+- [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md) - Hướng dẫn phát triển và triển khai
+
+### Tham khảo HRMS
+- [HRMS_REFERENCE.md](./HRMS_REFERENCE.md) - Phân tích và tham khảo từ HRMS
+
+### Tài liệu Kỹ thuật
+- [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) - API Specification
+- [DATABASE_DOCUMENTATION.md](./DATABASE_DOCUMENTATION.md) - Database Schema & Seed
+- [AI_PLAN.md](./AI_PLAN.md) - Kế hoạch tích hợp AI
+
+## 🔐 Authentication
+
+Hệ thống sử dụng JWT authentication:
+1. Login tại `/api/v1/auth/login/` (Django) hoặc `/api/auth/login` (Express)
+2. Nhận access token và refresh token
+3. Include token trong header: `Authorization: Bearer <token>`
+
+## 🎯 Định hướng
+
+- ✅ **Độc lập hoàn toàn** - Không phụ thuộc vào Odoo
+- ✅ **Tự xây dựng** - Mọi tính năng được implement từ đầu
+- ✅ **Tham khảo có chọn lọc** - HRMS chỉ để học hỏi workflow
+- ✅ **Tập trung mục tiêu** - Quản lý Dự án và tài liệu
 
 ## 🤝 Đóng góp
 
@@ -146,4 +183,3 @@ Dự án đang trong giai đoạn phát triển. Mọi đóng góp đều đư�
 ## 📄 License
 
 Copyright © 2024 Dự án Kinh điển Phương Đông
-

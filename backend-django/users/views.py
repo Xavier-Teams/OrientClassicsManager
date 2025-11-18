@@ -22,7 +22,8 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserSerializer
     
     def get_permissions(self):
-        if self.action == 'create':
+        # Allow unauthenticated access for translators endpoint and create
+        if self.action in ['create', 'translators']:
             return [AllowAny()]
         return [IsAuthenticated()]
     
@@ -40,3 +41,13 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'], url_path='translators')
+    def translators(self, request):
+        """Get list of translators (users with role='dich_gia')"""
+        translators = User.objects.filter(role='dich_gia', active=True)
+        serializer = self.get_serializer(translators, many=True)
+        return Response({
+            'count': translators.count(),
+            'results': serializer.data
+        })

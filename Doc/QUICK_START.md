@@ -1,108 +1,181 @@
-# 🚀 QUICK START - XÂY DỰNG DATABASE
+# 🚀 Quick Start - Khởi động ứng dụng
 
-## Bước 1: Push Database Schema
+## ⚠️ Lỗi thường gặp: `ERR_CONNECTION_REFUSED`
 
-Chạy lệnh:
+Nếu bạn gặp lỗi `Failed to load resource: net::ERR_CONNECTION_REFUSED` tại `localhost:8000`, điều này có nghĩa là **Django backend chưa được khởi động**.
+
+## 📋 Các bước khởi động
+
+### Bước 1: Khởi động Django Backend
+
+Mở terminal mới và chạy:
+
 ```bash
-npm run db:push
+cd backend-django
+python manage.py runserver
 ```
 
-**Khi được hỏi về các tables, bạn cần:**
-1. Nhấn phím mũi tên **↓** để chọn `+ administrative_tasks` (create table)
-2. Nhấn **Enter** để chọn
-3. Lặp lại cho tất cả các tables khác
+**Hoặc nếu dùng Python 3:**
 
-**Hoặc:** Nhấn **Enter** ngay khi thấy prompt (sẽ chọn option đầu tiên - create table)
-
-**Danh sách tables cần tạo:**
-- administrative_tasks
-- ai_interactions
-- contracts
-- council_memberships
-- documents
-- editing_tasks
-- form_templates
-- payment_milestones
-- payments
-- review_councils
-- review_evaluations
-- reviews
-- users
-- workflow_audit_log
-- works
-
-## Bước 2: Seed Database với Sample Data
-
-Sau khi push schema thành công, chạy:
 ```bash
-npm run db:seed
+cd backend-django
+python3 manage.py runserver
 ```
 
-Script sẽ tự động tạo:
-- ✅ 15 users với các roles khác nhau
-- ✅ 6 works (tác phẩm) với các trạng thái
-- ✅ 4 contracts (hợp đồng)
-- ✅ Payment milestones & payments
-- ✅ Review councils & reviews
-- ✅ Editing tasks
-- ✅ Administrative tasks
+✅ Django sẽ chạy tại: **http://localhost:8000**
 
-## Bước 3: Start Server
+Bạn sẽ thấy output tương tự:
+
+```
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+```
+
+### Bước 2: Khởi động Frontend (Terminal khác)
+
+Mở terminal mới và chạy:
 
 ```bash
+cd client
 npm run dev
 ```
 
-Server sẽ chạy tại: **http://localhost:5000**
+✅ Frontend sẽ chạy tại: **http://localhost:5173**
 
-## Bước 4: Test API Endpoints
+### Bước 3: Kiểm tra kết nối
 
-### PowerShell:
-```powershell
-# Get all users
-Invoke-WebRequest -Uri http://localhost:5000/api/users | ConvertFrom-Json | ConvertTo-Json -Depth 10
+1. Mở trình duyệt: http://localhost:5173/works
+2. Mở Browser DevTools (F12) → Network tab
+3. Kiểm tra xem API requests có thành công không
 
-# Get all works
-Invoke-WebRequest -Uri http://localhost:5000/api/works | ConvertFrom-Json | ConvertTo-Json -Depth 10
+## 🔍 Kiểm tra Django đang chạy
 
-# Get works by status
-Invoke-WebRequest -Uri http://localhost:5000/api/works?status=in_progress | ConvertFrom-Json | ConvertTo-Json -Depth 10
+### Test API trực tiếp trong trình duyệt:
 
-# Get contracts
-Invoke-WebRequest -Uri http://localhost:5000/api/contracts | ConvertFrom-Json | ConvertTo-Json -Depth 10
+1. Mở: http://localhost:8000/api/v1/works/board/
+2. Nếu thấy JSON data → Django đang chạy ✅
+3. Nếu thấy "This site can't be reached" → Django chưa chạy ❌
 
-# Get payments
-Invoke-WebRequest -Uri http://localhost:5000/api/payments | ConvertFrom-Json | ConvertTo-Json -Depth 10
+### Test bằng cURL:
+
+```bash
+curl http://localhost:8000/api/v1/works/board/
 ```
 
-### Browser:
-Mở browser và truy cập:
-- http://localhost:5000/api/users
-- http://localhost:5000/api/works
-- http://localhost:5000/api/contracts
+Nếu thành công → Django đang chạy ✅
 
-## Test Accounts (sau khi seed)
+## ⚠️ Troubleshooting
 
-- **Chủ nhiệm:** `chu_nhiem` / `password123`
-- **Thư ký:** `thu_ky_1` / `password123`
-- **Dịch giả 1:** `dich_gia_1` / `password123`
-- **BTV:** `btv_1` / `password123`
-- **Kế toán:** `ke_toan` / `password123`
+### Lỗi: `python: command not found`
 
-## Troubleshooting
+**Giải pháp:**
 
-### Lỗi khi push schema
-- Đảm bảo PostgreSQL đang chạy
-- Đảm bảo database `translation_db` đã được tạo
-- Kiểm tra `.env` file có đúng credentials
+- Windows: Sử dụng `py` thay vì `python`
+  ```bash
+  py manage.py runserver
+  ```
+- Hoặc cài đặt Python từ https://www.python.org/
 
-### Lỗi khi seed
-- Đảm bảo đã push schema trước (`npm run db:push`)
-- Kiểm tra database connection trong `.env`
+### Lỗi: `ModuleNotFoundError: No module named 'django'`
+
+**Giải pháp:** Cài đặt dependencies
+
+```bash
+cd backend-django
+pip install -r requirements.txt
+```
+
+### Lỗi: `django.db.utils.OperationalError: could not connect to server`
+
+**Giải pháp:** PostgreSQL chưa chạy hoặc database chưa được tạo
+
+1. Khởi động PostgreSQL service
+2. Tạo database `translation_db` (xem [QUICK_START_DATABASE.md](./QUICK_START_DATABASE.md))
+3. Chạy migrations:
+   ```bash
+   python manage.py migrate
+   ```
+
+### Lỗi: Port 8000 đã được sử dụng
+
+**Giải pháp:** Sử dụng port khác
+
+```bash
+python manage.py runserver 8001
+```
+
+Sau đó cập nhật `client/.env`:
+
+```env
+VITE_API_URL=http://localhost:8001
+```
+
+### Lỗi: CORS policy blocked
+
+**Giải pháp:** Kiểm tra `CORS_ALLOWED_ORIGINS` trong `backend-django/config/settings.py`
+
+Đảm bảo có:
+
+```python
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",  # Vite dev server
+    "http://localhost:3000",   # React dev server
+]
+```
+
+## 🔐 Tạo tài khoản Admin
+
+Để đăng nhập vào Django Admin (`http://127.0.0.1:8000/admin/`), bạn cần tạo superuser:
+
+```bash
+cd backend-django
+python manage.py createsuperuser
+```
+
+Nhập thông tin:
+
+- Username: `admin` (hoặc username khác)
+- Email: `admin@orientclassics.vn`
+- Password: [nhập password bạn muốn]
+
+**Lưu ý**: Password trong SQL seed data là placeholder, không thể dùng để đăng nhập. Bạn **phải** tạo superuser mới hoặc reset password.
+
+📚 Xem chi tiết: [ADMIN_LOGIN_GUIDE.md](./ADMIN_LOGIN_GUIDE.md)
+
+## ✅ Checklist
+
+Trước khi chạy ứng dụng, đảm bảo:
+
+- [ ] PostgreSQL đang chạy
+- [ ] Database `translation_db` đã được tạo
+- [ ] Django migrations đã chạy (`python manage.py migrate`)
+- [ ] Dữ liệu seed đã được insert (xem [SQL_SEED_DATA_README.md](./SQL_SEED_DATA_README.md))
+- [ ] Django dependencies đã được cài (`pip install -r requirements.txt`)
+- [ ] Frontend dependencies đã được cài (`npm install`)
+- [ ] **Đã tạo superuser để đăng nhập Admin** (`python manage.py createsuperuser`)
+
+## 🎯 Quy trình khởi động đầy đủ
+
+```bash
+# Terminal 1: Django Backend
+cd backend-django
+python manage.py runserver
+
+# Terminal 2: Frontend
+cd client
+npm run dev
+
+# Terminal 3: (Optional) Express Server cho AI services
+cd server
+npm run dev
+```
+
+## 📚 Tài liệu liên quan
+
+- [API_CONNECTION_GUIDE.md](./API_CONNECTION_GUIDE.md) - Hướng dẫn kết nối API
+- [TEST_API.md](./TEST_API.md) - Hướng dẫn test API
+- [QUICK_START_DATABASE.md](./QUICK_START_DATABASE.md) - Quick start database
 
 ---
 
-**Xem chi tiết:**
-- `Doc/DATABASE_SEED.md` - Chi tiết về seed data
-- `README_SEED.md` - Hướng dẫn seed
-
+**Lưu ý**: Luôn đảm bảo Django backend đang chạy trước khi mở frontend!

@@ -10,25 +10,62 @@ class TranslationPart(models.Model):
     name = models.CharField(max_length=200, verbose_name='Tên hợp phần')
     code = models.CharField(max_length=50, unique=True, verbose_name='Mã hợp phần')
     description = models.TextField(blank=True, verbose_name='Mô tả')
-    leader = models.ForeignKey(
+    
+    # Quản lý
+    manager = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='managed_parts',
+        verbose_name='Người quản lý'
+    )
+    team_leader = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='led_parts',
-        verbose_name='Trưởng hợp phần'
+        verbose_name='Trưởng nhóm'
     )
+    co_team_leader = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='co_led_parts',
+        verbose_name='Đồng Trưởng nhóm'
+    )
+    
+    # Computed fields
+    work_count = models.IntegerField(
+        default=0,
+        verbose_name='Số tác phẩm',
+        help_text='Tự động tính từ số lượng works'
+    )
+    
     is_active = models.BooleanField(default=True, verbose_name='Hoạt động')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Ngày tạo')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ngày cập nhật')
     
     class Meta:
         db_table = 'translation_parts'
         verbose_name = 'Hợp phần dịch thuật'
         verbose_name_plural = 'Hợp phần dịch thuật'
+        ordering = ['name']
     
     def __str__(self):
         return self.name
+    
+    def save(self, *args, **kwargs):
+        """Override save để tự động tính work_count"""
+        super().save(*args, **kwargs)
+        self._compute_work_count()
+    
+    def _compute_work_count(self):
+        """Tính số lượng tác phẩm"""
+        count = self.works.filter(active=True).count()
+        TranslationPart.objects.filter(id=self.id).update(work_count=count)
 
 
 class TranslationWork(models.Model):

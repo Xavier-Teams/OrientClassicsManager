@@ -4,9 +4,10 @@ from .models import TranslationWork, TranslationPart
 
 @admin.register(TranslationPart)
 class TranslationPartAdmin(admin.ModelAdmin):
-    list_display = ['name', 'code', 'leader', 'is_active']
-    list_filter = ['is_active']
-    search_fields = ['name', 'code']
+    list_display = ['name', 'code', 'manager', 'team_leader', 'work_count', 'is_active']
+    list_filter = ['is_active', 'manager', 'team_leader']
+    search_fields = ['name', 'code', 'description']
+    readonly_fields = ['work_count', 'created_at', 'updated_at']
 
 
 @admin.register(TranslationWork)

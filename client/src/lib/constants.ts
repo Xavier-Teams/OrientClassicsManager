@@ -4,8 +4,12 @@ export const WORK_STATUS_LABELS: Record<string, string> = {
   translator_assigned: "Đã gán dịch giả",
   trial_translation: "Dịch thử",
   trial_reviewed: "Đã thẩm định dịch thử",
+  contract_signed: "Đã ký hợp đồng",
   in_progress: "Đang dịch",
   progress_checked: "Đã kiểm tra tiến độ",
+  final_translation: "Dịch hoàn thiện",
+  expert_reviewed: "Đã thẩm định chuyên gia",
+  project_accepted: "Đã nghiệm thu Dự án",
   completed: "Hoàn thành",
   cancelled: "Đã hủy",
 };
@@ -90,6 +94,31 @@ export const PRIORITY_LABELS: Record<string, string> = {
   high: "Cao",
   urgent: "Khẩn",
 };
+
+// Map Django priority ('0', '1', '2') to frontend priority ('normal', 'high', 'urgent')
+export const PRIORITY_MAP: Record<string, string> = {
+  '0': 'normal',  // Bình thường
+  '1': 'high',    // Cao
+  '2': 'urgent',  // Khẩn
+};
+
+// Reverse map: frontend priority to Django priority
+export const PRIORITY_REVERSE_MAP: Record<string, string> = {
+  'normal': '0',
+  'high': '1',
+  'urgent': '2',
+  'low': '0', // low maps to normal
+};
+
+// Helper function to convert Django priority to frontend priority
+export function mapPriorityFromDjango(djangoPriority: string): string {
+  return PRIORITY_MAP[djangoPriority] || 'normal';
+}
+
+// Helper function to convert frontend priority to Django priority
+export function mapPriorityToDjango(frontendPriority: string): string {
+  return PRIORITY_REVERSE_MAP[frontendPriority] || '0';
+}
 
 export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   source: "Bản nền",
