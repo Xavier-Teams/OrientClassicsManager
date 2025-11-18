@@ -146,6 +146,50 @@ export default function Works() {
     }
   }, [visibleStatuses, viewPreferencesOpen]);
 
+  // List view column preferences
+  const allListColumns = [
+    { id: "name", label: "Tên tác phẩm", sortable: true },
+    { id: "author", label: "Tác giả", sortable: true },
+    { id: "translator", label: "Dịch giả", sortable: true },
+    { id: "translation_part", label: "Hợp phần", sortable: false },
+    { id: "state", label: "Trạng thái", sortable: true },
+    { id: "priority", label: "Ưu tiên", sortable: true },
+    { id: "progress", label: "Tiến độ", sortable: true },
+    { id: "created_at", label: "Ngày tạo", sortable: false },
+  ];
+
+  const [visibleListColumns, setVisibleListColumns] = useState<Set<string>>(
+    () => {
+      // Load from localStorage on mount
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("works_list_visible_columns");
+        if (saved) {
+          try {
+            return new Set(JSON.parse(saved));
+          } catch (e) {
+            // If parsing fails, return default (all columns)
+          }
+        }
+      }
+      // Default: all columns visible
+      return new Set(allListColumns.map((col) => col.id));
+    }
+  );
+
+  // Temporary selections in popover (before applying)
+  const [tempVisibleListColumns, setTempVisibleListColumns] =
+    useState<Set<string>>(visibleListColumns);
+
+  // Control list view preferences popover open/close state
+  const [listViewPreferencesOpen, setListViewPreferencesOpen] = useState(false);
+
+  // Sync tempVisibleListColumns when visibleListColumns changes externally or when popover opens
+  useEffect(() => {
+    if (listViewPreferencesOpen) {
+      setTempVisibleListColumns(new Set(visibleListColumns));
+    }
+  }, [visibleListColumns, listViewPreferencesOpen]);
+
   // Modal states
   const [workFormOpen, setWorkFormOpen] = useState(false);
   const [workDetailOpen, setWorkDetailOpen] = useState(false);
@@ -483,6 +527,64 @@ export default function Works() {
     setTempVisibleStatuses(new Set(visibleStatuses));
   };
 
+  // List view column visibility handlers
+  const toggleListColumnVisibility = (columnId: string) => {
+    setTempVisibleListColumns((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(columnId)) {
+        newSet.delete(columnId);
+      } else {
+        newSet.add(columnId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAllListColumns = () => {
+    setTempVisibleListColumns(new Set(allListColumns.map((col) => col.id)));
+  };
+
+  const handleDeselectAllListColumns = () => {
+    setTempVisibleListColumns(new Set());
+  };
+
+  // Apply list view column preferences
+  const handleApplyListViewPreferences = () => {
+    // Validate: must have at least one column selected (excluding actions)
+    if (tempVisibleListColumns.size === 0) {
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng chọn ít nhất một cột để hiển thị",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Save to localStorage
+    if (typeof window !== "undefined") {
+      localStorage.setItem(
+        "works_list_visible_columns",
+        JSON.stringify(Array.from(tempVisibleListColumns))
+      );
+    }
+
+    // Update visible columns
+    setVisibleListColumns(new Set(tempVisibleListColumns));
+
+    // Close popover
+    setListViewPreferencesOpen(false);
+
+    toast({
+      title: "Thành công",
+      description: "Đã áp dụng tùy chọn hiển thị",
+    });
+  };
+
+  // Reset list view preferences
+  const handleResetListViewPreferences = () => {
+    setTempVisibleListColumns(new Set(visibleListColumns));
+  };
+
   // Get works for each column from API data
   const getWorksForStatus = (status: string): Work[] => {
     if (!boardData) return [];
@@ -662,7 +764,7 @@ export default function Works() {
           <h1
             className="text-3xl font-bold tracking-tight"
             data-testid="heading-works">
-            Quản lý tác phẩm
+            Quản lý dịch thuật
           </h1>
           <p className="text-muted-foreground mt-1">
             Theo dõi và quản lý tiến độ dịch thuật các tác phẩm
@@ -1062,6 +1164,94 @@ export default function Works() {
         </TabsContent>
 
         <TabsContent value="list" className="mt-6">
+          {viewMode === "list" && (
+            <div className="flex items-center justify-end mb-4">
+              <Popover
+                open={listViewPreferencesOpen}
+                onOpenChange={setListViewPreferencesOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <Settings className="h-4 w-4" />
+                    Tùy chọn hiển thị
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80" align="end">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-sm">Hiển thị cột</h4>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={handleSelectAllListColumns}>
+                          Chọn tất cả
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={handleDeselectAllListColumns}>
+                          Bỏ chọn tất cả
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                      {allListColumns.map((column) => (
+                        <div
+                          key={column.id}
+                          className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`column-${column.id}`}
+                            checked={tempVisibleListColumns.has(column.id)}
+                            onCheckedChange={() =>
+                              toggleListColumnVisibility(column.id)
+                            }
+                          />
+                          <Label
+                            htmlFor={`column-${column.id}`}
+                            className="text-sm font-normal cursor-pointer flex items-center gap-2 flex-1">
+                            {column.label}
+                            {column.sortable && (
+                              <span className="text-xs text-muted-foreground">
+                                (sắp xếp)
+                              </span>
+                            )}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between pt-3 border-t gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleResetListViewPreferences}
+                        className="flex-1">
+                        Hủy
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleApplyListViewPreferences}
+                        className="flex-1"
+                        disabled={tempVisibleListColumns.size === 0}>
+                        Áp dụng
+                      </Button>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {tempVisibleListColumns.size === 0 && (
+                        <span className="text-destructive">
+                          Vui lòng chọn ít nhất một cột để hiển thị
+                        </span>
+                      )}
+                      {tempVisibleListColumns.size > 0 && (
+                        <span>Đã chọn {tempVisibleListColumns.size} cột</span>
+                      )}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1072,55 +1262,72 @@ export default function Works() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>
-                        <button
-                          className="flex items-center hover:text-primary transition-colors"
-                          onClick={() => handleSort("name")}>
-                          Tên tác phẩm
-                          {getSortIcon("name")}
-                        </button>
-                      </TableHead>
-                      <TableHead>
-                        <button
-                          className="flex items-center hover:text-primary transition-colors"
-                          onClick={() => handleSort("author")}>
-                          Tác giả
-                          {getSortIcon("author")}
-                        </button>
-                      </TableHead>
-                      <TableHead>
-                        <button
-                          className="flex items-center hover:text-primary transition-colors"
-                          onClick={() => handleSort("translator")}>
-                          Dịch giả
-                          {getSortIcon("translator")}
-                        </button>
-                      </TableHead>
-                      <TableHead>
-                        <button
-                          className="flex items-center hover:text-primary transition-colors"
-                          onClick={() => handleSort("state")}>
-                          Trạng thái
-                          {getSortIcon("state")}
-                        </button>
-                      </TableHead>
-                      <TableHead>
-                        <button
-                          className="flex items-center hover:text-primary transition-colors"
-                          onClick={() => handleSort("priority")}>
-                          Ưu tiên
-                          {getSortIcon("priority")}
-                        </button>
-                      </TableHead>
-                      <TableHead>
-                        <button
-                          className="flex items-center hover:text-primary transition-colors"
-                          onClick={() => handleSort("progress")}>
-                          Tiến độ
-                          {getSortIcon("progress")}
-                        </button>
-                      </TableHead>
-                      <TableHead>Ngày tạo</TableHead>
+                      {visibleListColumns.has("name") && (
+                        <TableHead>
+                          <button
+                            className="flex items-center hover:text-primary transition-colors"
+                            onClick={() => handleSort("name")}>
+                            Tên tác phẩm
+                            {getSortIcon("name")}
+                          </button>
+                        </TableHead>
+                      )}
+                      {visibleListColumns.has("author") && (
+                        <TableHead>
+                          <button
+                            className="flex items-center hover:text-primary transition-colors"
+                            onClick={() => handleSort("author")}>
+                            Tác giả
+                            {getSortIcon("author")}
+                          </button>
+                        </TableHead>
+                      )}
+                      {visibleListColumns.has("translator") && (
+                        <TableHead>
+                          <button
+                            className="flex items-center hover:text-primary transition-colors"
+                            onClick={() => handleSort("translator")}>
+                            Dịch giả
+                            {getSortIcon("translator")}
+                          </button>
+                        </TableHead>
+                      )}
+                      {visibleListColumns.has("translation_part") && (
+                        <TableHead>Hợp phần</TableHead>
+                      )}
+                      {visibleListColumns.has("state") && (
+                        <TableHead>
+                          <button
+                            className="flex items-center hover:text-primary transition-colors"
+                            onClick={() => handleSort("state")}>
+                            Trạng thái
+                            {getSortIcon("state")}
+                          </button>
+                        </TableHead>
+                      )}
+                      {visibleListColumns.has("priority") && (
+                        <TableHead>
+                          <button
+                            className="flex items-center hover:text-primary transition-colors"
+                            onClick={() => handleSort("priority")}>
+                            Ưu tiên
+                            {getSortIcon("priority")}
+                          </button>
+                        </TableHead>
+                      )}
+                      {visibleListColumns.has("progress") && (
+                        <TableHead>
+                          <button
+                            className="flex items-center hover:text-primary transition-colors"
+                            onClick={() => handleSort("progress")}>
+                            Tiến độ
+                            {getSortIcon("progress")}
+                          </button>
+                        </TableHead>
+                      )}
+                      {visibleListColumns.has("created_at") && (
+                        <TableHead>Ngày tạo</TableHead>
+                      )}
                       <TableHead className="text-right">Thao tác</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1137,10 +1344,12 @@ export default function Works() {
                       const sortedWorks = sortWorks(filteredWorks);
 
                       if (sortedWorks.length === 0) {
+                        // Calculate colSpan: visible columns + actions column
+                        const colSpan = visibleListColumns.size + 1;
                         return (
                           <TableRow>
                             <TableCell
-                              colSpan={8}
+                              colSpan={colSpan}
                               className="text-center py-12 text-muted-foreground">
                               Không có tác phẩm nào
                             </TableCell>
@@ -1150,116 +1359,139 @@ export default function Works() {
 
                       return sortedWorks.map((work) => (
                         <TableRow key={work.id} className="hover:bg-muted/50">
-                          <TableCell className="font-medium">
-                            <div
-                              className="cursor-pointer hover:text-primary"
-                              onClick={() => handleViewWork(work)}>
-                              {work.name}
-                            </div>
-                            {work.name_original && (
-                              <div className="text-sm text-muted-foreground mt-1">
-                                {work.name_original}
+                          {visibleListColumns.has("name") && (
+                            <TableCell className="font-medium">
+                              <div
+                                className="cursor-pointer hover:text-primary"
+                                onClick={() => handleViewWork(work)}>
+                                {work.name}
                               </div>
-                            )}
-                          </TableCell>
-                          <TableCell>{work.author || "—"}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {work.translator_name ? (
-                                <>
-                                  <Avatar className="h-6 w-6">
-                                    <AvatarFallback className="text-xs">
-                                      {work.translator_name
-                                        .charAt(0)
-                                        .toUpperCase()}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <span className="text-sm">
-                                    {work.translator_name}
+                              {work.name_original && (
+                                <div className="text-sm text-muted-foreground mt-1">
+                                  {work.name_original}
+                                </div>
+                              )}
+                            </TableCell>
+                          )}
+                          {visibleListColumns.has("author") && (
+                            <TableCell>{work.author || "—"}</TableCell>
+                          )}
+                          {visibleListColumns.has("translator") && (
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {work.translator_name ? (
+                                  <>
+                                    <Avatar className="h-6 w-6">
+                                      <AvatarFallback className="text-xs">
+                                        {work.translator_name
+                                          .charAt(0)
+                                          .toUpperCase()}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <span className="text-sm">
+                                      {work.translator_name}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="text-muted-foreground text-sm">
+                                    Chưa gán
                                   </span>
-                                </>
-                              ) : (
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
+                          {visibleListColumns.has("translation_part") && (
+                            <TableCell>
+                              {work.translation_part_name || (
                                 <span className="text-muted-foreground text-sm">
                                   Chưa gán
                                 </span>
                               )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={
-                                priorityColors[work.state] ||
-                                "bg-workflow-draft"
-                              }>
-                              {WORK_STATUS_LABELS[
-                                work.state as keyof typeof WORK_STATUS_LABELS
-                              ] || work.state}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {work.priority !== "normal" &&
-                            work.priority !== "0" ? (
+                            </TableCell>
+                          )}
+                          {visibleListColumns.has("state") && (
+                            <TableCell>
                               <Badge
                                 variant="outline"
-                                className={`${
-                                  priorityColors[work.priority] ||
-                                  priorityColors[
-                                    mapPriorityFromDjango(work.priority)
-                                  ]
-                                } text-white border-0`}>
-                                <div className="flex items-center gap-1">
-                                  {getPriorityIcon(
-                                    mapPriorityFromDjango(work.priority)
-                                  )}
+                                className={
+                                  priorityColors[work.state] ||
+                                  "bg-workflow-draft"
+                                }>
+                                {WORK_STATUS_LABELS[
+                                  work.state as keyof typeof WORK_STATUS_LABELS
+                                ] || work.state}
+                              </Badge>
+                            </TableCell>
+                          )}
+                          {visibleListColumns.has("priority") && (
+                            <TableCell>
+                              {work.priority !== "normal" &&
+                              work.priority !== "0" ? (
+                                <Badge
+                                  variant="outline"
+                                  className={`${
+                                    priorityColors[work.priority] ||
+                                    priorityColors[
+                                      mapPriorityFromDjango(work.priority)
+                                    ]
+                                  } text-white border-0`}>
+                                  <div className="flex items-center gap-1">
+                                    {getPriorityIcon(
+                                      mapPriorityFromDjango(work.priority)
+                                    )}
+                                    {PRIORITY_LABELS[
+                                      mapPriorityFromDjango(
+                                        work.priority
+                                      ) as keyof typeof PRIORITY_LABELS
+                                    ] || work.priority}
+                                  </div>
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">
                                   {PRIORITY_LABELS[
                                     mapPriorityFromDjango(
                                       work.priority
                                     ) as keyof typeof PRIORITY_LABELS
-                                  ] || work.priority}
-                                </div>
-                              </Badge>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">
-                                {PRIORITY_LABELS[
-                                  mapPriorityFromDjango(
-                                    work.priority
-                                  ) as keyof typeof PRIORITY_LABELS
-                                ] || "Bình thường"}
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2 min-w-[120px]">
-                              <div className="flex-1 space-y-1">
-                                <div className="flex items-center justify-between text-xs">
-                                  <span className="text-muted-foreground">
-                                    {work.translation_progress}%
-                                  </span>
-                                </div>
-                                <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full bg-primary transition-all"
-                                    style={{
-                                      width: `${work.translation_progress}%`,
-                                    }}
-                                  />
+                                  ] || "Bình thường"}
+                                </span>
+                              )}
+                            </TableCell>
+                          )}
+                          {visibleListColumns.has("progress") && (
+                            <TableCell>
+                              <div className="flex items-center gap-2 min-w-[120px]">
+                                <div className="flex-1 space-y-1">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-muted-foreground">
+                                      {work.translation_progress}%
+                                    </span>
+                                  </div>
+                                  <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-primary transition-all"
+                                      style={{
+                                        width: `${work.translation_progress}%`,
+                                      }}
+                                    />
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm">
-                              {new Date(work.created_at).toLocaleDateString(
-                                "vi-VN",
-                                {
-                                  year: "numeric",
-                                  month: "short",
-                                  day: "numeric",
-                                }
-                              )}
-                            </div>
-                          </TableCell>
+                            </TableCell>
+                          )}
+                          {visibleListColumns.has("created_at") && (
+                            <TableCell>
+                              <div className="text-sm">
+                                {new Date(work.created_at).toLocaleDateString(
+                                  "vi-VN",
+                                  {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "numeric",
+                                  }
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
                           <TableCell className="text-right">
                             {(canEditWork(user, work) ||
                               canDeleteWork(user) ||
