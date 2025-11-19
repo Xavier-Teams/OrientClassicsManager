@@ -16,6 +16,7 @@ export interface Work {
   translation_part_code?: string;
   translator?: string;
   translator_name?: string;
+  translator_details?: Translator | null; // Chi tiết dịch giả để hiển thị trong modal
   state: string; // Django uses 'state' instead of 'translation_status'
   priority: string;
   translation_progress: number;
@@ -82,6 +83,7 @@ class ApiClient {
     
     // Build headers object - handle both Headers object and plain object
     let headers: HeadersInit;
+    const isFormData = options?.body instanceof FormData;
     
     if (options?.headers instanceof Headers) {
       // If headers is a Headers object, convert to plain object
@@ -92,9 +94,12 @@ class ApiClient {
     } else {
       // If headers is a plain object or undefined, use it directly
       headers = {
-        "Content-Type": "application/json",
         ...(options?.headers || {}),
       };
+      // Only set Content-Type if not FormData (browser will set it with boundary for FormData)
+      if (!isFormData && !options?.headers?.["Content-Type"]) {
+        headers["Content-Type"] = "application/json";
+      }
     }
 
     // Always add Authorization header if token exists (this will override any existing Authorization header)
@@ -208,11 +213,12 @@ class ApiClient {
   }
 
   // Users/Translators API
-  async getTranslators(): Promise<{ count: number; results: User[] }> {
-    return this.request<{ count: number; results: User[] }>(
-      "/api/v1/auth/users/translators/"
-    );
-  }
+  // Deprecated: Use getTranslators from Translators API instead
+  // async getTranslators(): Promise<{ count: number; results: User[] }> {
+  //   return this.request<{ count: number; results: User[] }>(
+  //     "/api/v1/auth/users/translators/"
+  //   );
+  // }
 
   // Authentication API
   async login(username: string, password: string): Promise<{
@@ -470,6 +476,125 @@ class ApiClient {
       body: JSON.stringify({ translator_id: translatorId }),
     });
   }
+
+  // Contracts API
+  async getContracts(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    work_id?: number;
+  }): Promise<{ count: number; next: string | null; previous: string | null; results: Contract[] }> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append("page", params.page.toString());
+    if (params?.page_size) queryParams.append("page_size", params.page_size.toString());
+    if (params?.search) queryParams.append("search", params.search);
+    if (params?.status) queryParams.append("status", params.status);
+    if (params?.work_id) queryParams.append("work_id", params.work_id.toString());
+
+    const queryString = queryParams.toString();
+    return this.request<{ count: number; next: string | null; previous: string | null; results: Contract[] }>(
+      `/api/v1/contracts/${queryString ? `?${queryString}` : ""}`
+    );
+  }
+
+  async getContract(id: number | string): Promise<Contract> {
+    return this.request<Contract>(`/api/v1/contracts/${id}/`);
+  }
+
+  async createContract(contract: {
+    contract_number: string;
+    work: number;
+    translator: number;
+    start_date: string;
+    end_date: string;
+    total_amount: string | number;
+    advance_payment_1?: string | number;
+    advance_payment_2?: string | number;
+    advance_payment_include_overview?: boolean;
+    final_payment?: string | number;
+    status?: string;
+    signed_at?: string;
+    contract_file?: File;
+  }): Promise<Contract> {
+    const { contract_file, ...contractData } = contract;
+    
+    // If there's a file, use FormData
+    if (contract_file instanceof File) {
+      const formData = new FormData();
+      const processedData = {
+        ...contractData,
+        total_amount: typeof contractData.total_amount === "string" ? parseFloat(contractData.total_amount) : contractData.total_amount,
+        advance_payment_1: contractData.advance_payment_1 ? (typeof contractData.advance_payment_1 === "string" ? parseFloat(contractData.advance_payment_1) : contractData.advance_payment_1) : 0,
+        advance_payment_2: contractData.advance_payment_2 ? (typeof contractData.advance_payment_2 === "string" ? parseFloat(contractData.advance_payment_2) : contractData.advance_payment_2) : 0,
+        final_payment: contractData.final_payment ? (typeof contractData.final_payment === "string" ? parseFloat(contractData.final_payment) : contractData.final_payment) : 0,
+      };
+      
+      Object.entries(processedData).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          if (typeof value === "object" && !(value instanceof File)) {
+            formData.append(key, JSON.stringify(value));
+          } else {
+            formData.append(key, String(value));
+          }
+        }
+      });
+      formData.append("contract_file", contract_file);
+      
+      return this.request<Contract>("/api/v1/contracts/", {
+        method: "POST",
+        body: formData,
+      });
+    }
+    
+    // Otherwise use JSON
+    return this.request<Contract>("/api/v1/contracts/", {
+      method: "POST",
+      body: JSON.stringify({
+        ...contractData,
+        total_amount: typeof contractData.total_amount === "string" ? parseFloat(contractData.total_amount) : contractData.total_amount,
+        advance_payment_1: contractData.advance_payment_1 ? (typeof contractData.advance_payment_1 === "string" ? parseFloat(contractData.advance_payment_1) : contractData.advance_payment_1) : 0,
+        advance_payment_2: contractData.advance_payment_2 ? (typeof contractData.advance_payment_2 === "string" ? parseFloat(contractData.advance_payment_2) : contractData.advance_payment_2) : 0,
+        final_payment: contractData.final_payment ? (typeof contractData.final_payment === "string" ? parseFloat(contractData.final_payment) : contractData.final_payment) : 0,
+      }),
+    });
+  }
+
+  async updateContract(id: number | string, contract: Partial<Contract> & { contract_file?: File }): Promise<Contract> {
+    const { contract_file, ...contractData } = contract;
+    
+    // If there's a file, use FormData
+    if (contract_file instanceof File) {
+      const formData = new FormData();
+      Object.entries(contractData).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          if (typeof value === "object" && !(value instanceof File)) {
+            formData.append(key, JSON.stringify(value));
+          } else {
+            formData.append(key, String(value));
+          }
+        }
+      });
+      formData.append("contract_file", contract_file);
+      
+      return this.request<Contract>(`/api/v1/contracts/${id}/`, {
+        method: "PATCH",
+        body: formData,
+      });
+    }
+    
+    // Otherwise use JSON
+    return this.request<Contract>(`/api/v1/contracts/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(contractData),
+    });
+  }
+
+  async deleteContract(id: number | string): Promise<void> {
+    return this.request<void>(`/api/v1/contracts/${id}/`, {
+      method: "DELETE",
+    });
+  }
 }
 
 export interface User {
@@ -511,6 +636,29 @@ export interface Translator {
   user?: number;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface Contract {
+  id: number;
+  contract_number: string;
+  work: number;
+  work_name?: string;
+  translator: number;
+  translator_name?: string;
+  translator_details?: Translator | null;
+  start_date: string;
+  end_date: string;
+  total_amount: number;
+  advance_payment_1: number;
+  advance_payment_2: number;
+  advance_payment_include_overview?: boolean;
+  final_payment: number;
+  status: string;
+  contract_file?: string;
+  signed_at?: string;
+  created_at: string;
+  updated_at: string;
+  created_by?: number;
 }
 
 export const apiClient = new ApiClient();

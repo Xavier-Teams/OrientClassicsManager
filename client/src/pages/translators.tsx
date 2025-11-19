@@ -134,7 +134,7 @@ export default function Translators() {
   const loadTranslators = async () => {
     try {
       setIsLoading(true);
-      const response = await apiClient.getTranslators();
+      const response = await apiClient.getTranslators({ active: true });
       setTranslators(response.results);
       setFilteredTranslators(response.results);
     } catch (error) {

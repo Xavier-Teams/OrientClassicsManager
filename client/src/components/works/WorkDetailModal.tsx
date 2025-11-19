@@ -13,6 +13,8 @@ import { Work } from "@/lib/api";
 import { WORK_STATUS_LABELS, PRIORITY_LABELS } from "@/lib/constants";
 import { mapPriorityFromDjango } from "@/lib/constants";
 import { Calendar, User, FileText, Clock } from "lucide-react";
+import { TranslatorInfoModal } from "@/components/translators/TranslatorInfoModal";
+import { useState } from "react";
 
 interface WorkDetailModalProps {
   open: boolean;
@@ -25,6 +27,8 @@ export function WorkDetailModal({
   onOpenChange,
   work,
 }: WorkDetailModalProps) {
+  const [translatorModalOpen, setTranslatorModalOpen] = useState(false);
+  
   if (!work) return null;
 
   const priority = mapPriorityFromDjango(work.priority);
@@ -117,7 +121,21 @@ export function WorkDetailModal({
                   <div>
                     <p className="text-sm font-medium">Dịch giả</p>
                     <p className="text-sm text-muted-foreground">
-                      {work.translator_name || "Chưa gán"}
+                      {work.translator_name ? (
+                        <button
+                          onClick={() => {
+                            if (work.translator_details) {
+                              setTranslatorModalOpen(true);
+                            }
+                          }}
+                          className="text-primary hover:underline cursor-pointer"
+                          title="Xem thông tin dịch giả"
+                        >
+                          {work.translator_name}
+                        </button>
+                      ) : (
+                        "Chưa gán"
+                      )}
                     </p>
                   </div>
                 </div>
@@ -169,6 +187,13 @@ export function WorkDetailModal({
           </div>
         </div>
       </DialogContent>
+      
+      {/* Translator Info Modal */}
+      <TranslatorInfoModal
+        translator={work.translator_details || null}
+        open={translatorModalOpen}
+        onOpenChange={setTranslatorModalOpen}
+      />
     </Dialog>
   );
 }

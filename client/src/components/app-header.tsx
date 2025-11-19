@@ -27,7 +27,7 @@ export function AppHeader() {
   };
 
   const handleProfileClick = () => {
-    setLocation("/users");
+    setLocation("/my-profile");
   };
 
   const handleSettingsClick = () => {

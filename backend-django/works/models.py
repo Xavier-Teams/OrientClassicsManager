@@ -115,12 +115,22 @@ class TranslationWork(models.Model):
         verbose_name='Hợp phần dịch thuật'
     )
     translator = models.ForeignKey(
-        User,
+        'translators.Translator',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='translated_works',
         verbose_name='Dịch giả'
+    )
+    # Keep old translator_user field for backward compatibility during migration
+    translator_user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='old_translated_works',
+        verbose_name='Dịch giả (User - deprecated)',
+        help_text='Deprecated: Sử dụng translator thay thế'
     )
     
     # State (using django-fsm)

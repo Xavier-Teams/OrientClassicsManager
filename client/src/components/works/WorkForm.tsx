@@ -32,7 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Work, User } from "@/lib/api";
+import { Work, User, Translator } from "@/lib/api";
 import { WORK_STATUS_LABELS, PRIORITY_LABELS } from "@/lib/constants";
 import { mapPriorityToDjango, mapPriorityFromDjango } from "@/lib/constants";
 
@@ -58,7 +58,7 @@ interface WorkFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   work?: Work | null;
-  translators?: User[];
+  translators?: (User | Translator)[];
   translationParts?: Array<{ id: number; name: string; code: string }>;
   onSubmit: (data: WorkFormValues) => Promise<void>;
   isLoading?: boolean;

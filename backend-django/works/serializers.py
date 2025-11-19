@@ -48,7 +48,8 @@ class TranslationPartDetailSerializer(serializers.ModelSerializer):
 
 class TranslationWorkSerializer(serializers.ModelSerializer):
     progress = serializers.ReadOnlyField()
-    translator_name = serializers.CharField(source='translator.full_name', read_only=True, allow_null=True)
+    translator_name = serializers.SerializerMethodField()
+    translator_details = serializers.SerializerMethodField()
     translation_part_name = serializers.CharField(source='translation_part.name', read_only=True, allow_null=True)
     translation_part_code = serializers.CharField(source='translation_part.code', read_only=True, allow_null=True)
     
@@ -59,12 +60,43 @@ class TranslationWorkSerializer(serializers.ModelSerializer):
             'source_language', 'target_language',
             'page_count', 'word_count', 'description',
             'translation_part', 'translation_part_name', 'translation_part_code',
-            'translator', 'translator_name',
+            'translator', 'translator_name', 'translator_details',
             'state', 'priority', 'translation_progress', 'progress',
             'notes', 'active',
             'created_at', 'updated_at', 'created_by'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'progress', 'created_by']
+    
+    def get_translator_name(self, obj):
+        """Lấy tên dịch giả từ Translator hoặc User (backward compatibility)"""
+        if obj.translator:
+            return obj.translator.full_name
+        elif obj.translator_user:
+            return obj.translator_user.full_name
+        return None
+    
+    def get_translator_details(self, obj):
+        """Lấy chi tiết dịch giả để hiển thị trong modal"""
+        if obj.translator:
+            translator = obj.translator
+            return {
+                'id': translator.id,
+                'full_name': translator.full_name,
+                'first_name': translator.first_name,
+                'last_name': translator.last_name,
+                'id_card_number': translator.id_card_number,
+                'id_card_issue_date': translator.id_card_issue_date,
+                'id_card_issue_place': translator.id_card_issue_place,
+                'workplace': translator.workplace,
+                'address': translator.address,
+                'phone': translator.phone,
+                'email': translator.email,
+                'bank_account_number': translator.bank_account_number,
+                'bank_name': translator.bank_name,
+                'bank_branch': translator.bank_branch,
+                'tax_code': translator.tax_code,
+            }
+        return None
     
     def update(self, instance, validated_data):
         """Override update to handle FSMField state changes properly"""

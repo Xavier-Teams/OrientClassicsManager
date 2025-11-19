@@ -17,6 +17,7 @@ import AdminTasks from "@/pages/admin-tasks";
 import Users from "@/pages/users";
 import AdminUsers from "@/pages/admin/users";
 import Translators from "@/pages/translators";
+import MyProfile from "@/pages/my-profile";
 import AIAssistant from "@/pages/ai-assistant";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
@@ -62,6 +63,7 @@ function Router() {
                 <Route path="/editing" component={Editing} />
                 <Route path="/admin-tasks" component={AdminTasks} />
                 <Route path="/users" component={Users} />
+                <Route path="/my-profile" component={MyProfile} />
                 <Route path="/admin/users">
                   {() => (
                     <ProtectedRoute requiredPermission={canManageUsers} fallbackPath="/users">

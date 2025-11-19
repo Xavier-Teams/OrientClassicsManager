@@ -49,6 +49,7 @@ export const CONTRACT_STATUS_LABELS: Record<string, string> = {
   active: "Đang thực hiện",
   completed: "Hoàn thành",
   terminated: "Chấm dứt",
+  cancelled: "Đã hủy",
 };
 
 export const PAYMENT_STATUS_LABELS: Record<string, string> = {
@@ -98,27 +99,27 @@ export const PRIORITY_LABELS: Record<string, string> = {
 
 // Map Django priority ('0', '1', '2') to frontend priority ('normal', 'high', 'urgent')
 export const PRIORITY_MAP: Record<string, string> = {
-  '0': 'normal',  // Bình thường
-  '1': 'high',    // Cao
-  '2': 'urgent',  // Khẩn
+  "0": "normal", // Bình thường
+  "1": "high", // Cao
+  "2": "urgent", // Khẩn
 };
 
 // Reverse map: frontend priority to Django priority
 export const PRIORITY_REVERSE_MAP: Record<string, string> = {
-  'normal': '0',
-  'high': '1',
-  'urgent': '2',
-  'low': '0', // low maps to normal
+  normal: "0",
+  high: "1",
+  urgent: "2",
+  low: "0", // low maps to normal
 };
 
 // Helper function to convert Django priority to frontend priority
 export function mapPriorityFromDjango(djangoPriority: string): string {
-  return PRIORITY_MAP[djangoPriority] || 'normal';
+  return PRIORITY_MAP[djangoPriority] || "normal";
 }
 
 // Helper function to convert frontend priority to Django priority
 export function mapPriorityToDjango(frontendPriority: string): string {
-  return PRIORITY_REVERSE_MAP[frontendPriority] || '0';
+  return PRIORITY_REVERSE_MAP[frontendPriority] || "0";
 }
 
 export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
@@ -143,7 +144,11 @@ export const TASK_STATUS_LABELS: Record<string, string> = {
 
 export const EDITING_STEPS = [
   { value: "proofreading", label: "Hiệu đính", role: "chuyen_gia" },
-  { value: "editing_draft", label: "Biên tập thô (BTV2)", role: "bien_tap_vien" },
+  {
+    value: "editing_draft",
+    label: "Biên tập thô (BTV2)",
+    role: "bien_tap_vien",
+  },
   { value: "cover_design", label: "Thiết kế bìa", role: "ky_thuat_vien" },
   { value: "proof_1", label: "Biên tập Bông 1 (BTV1)", role: "bien_tap_vien" },
   { value: "layout", label: "Mi trang (KTV)", role: "ky_thuat_vien" },

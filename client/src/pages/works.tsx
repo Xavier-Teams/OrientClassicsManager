@@ -73,9 +73,10 @@ import {
   PRIORITY_LABELS,
   mapPriorityFromDjango,
 } from "@/lib/constants";
-import { apiClient, Work, WorkBoardResponse, User as ApiUser } from "@/lib/api";
+import { apiClient, Work, WorkBoardResponse, User as ApiUser, Translator } from "@/lib/api";
 import { WorkForm } from "@/components/works/WorkForm";
 import { WorkDetailModal } from "@/components/works/WorkDetailModal";
+import { TranslatorInfoModal } from "@/components/translators/TranslatorInfoModal";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   canCreateWork,
@@ -98,6 +99,8 @@ export default function Works() {
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [selectedPart, setSelectedPart] = useState<string>("all");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [selectedTranslator, setSelectedTranslator] = useState<Work["translator_details"] | null>(null);
+  const [translatorModalOpen, setTranslatorModalOpen] = useState(false);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
@@ -210,10 +213,10 @@ export default function Works() {
   // Fetch translators and translation parts for form
   const { data: translatorsData } = useQuery<{
     count: number;
-    results: ApiUser[];
+    results: Translator[];
   }>({
     queryKey: ["translators"],
-    queryFn: () => apiClient.getTranslators(),
+    queryFn: () => apiClient.getTranslators({ active: true }),
     enabled: workFormOpen, // Only fetch when form is open
   });
 
@@ -1104,9 +1107,22 @@ export default function Works() {
                           <CardContent className="p-4 pt-0 space-y-3">
                             <div className="flex items-center gap-2 text-sm">
                               <User className="h-3.5 w-3.5 text-muted-foreground" />
-                              <span className="text-muted-foreground">
-                                {work.translator_name || "Chưa gán"}
-                              </span>
+                              {work.translator_name ? (
+                                <button
+                                  onClick={() => {
+                                    if (work.translator_details) {
+                                      setSelectedTranslator(work.translator_details);
+                                      setTranslatorModalOpen(true);
+                                    }
+                                  }}
+                                  className="text-primary hover:underline cursor-pointer text-muted-foreground hover:text-primary transition-colors"
+                                  title="Xem thông tin dịch giả"
+                                >
+                                  {work.translator_name}
+                                </button>
+                              ) : (
+                                <span className="text-muted-foreground">Chưa gán</span>
+                              )}
                             </div>
 
                             <div className="space-y-1">
@@ -1388,9 +1404,18 @@ export default function Works() {
                                           .toUpperCase()}
                                       </AvatarFallback>
                                     </Avatar>
-                                    <span className="text-sm">
+                                    <button
+                                      onClick={() => {
+                                        if (work.translator_details) {
+                                          setSelectedTranslator(work.translator_details);
+                                          setTranslatorModalOpen(true);
+                                        }
+                                      }}
+                                      className="text-sm text-primary hover:underline cursor-pointer"
+                                      title="Xem thông tin dịch giả"
+                                    >
                                       {work.translator_name}
-                                    </span>
+                                    </button>
                                   </>
                                 ) : (
                                   <span className="text-muted-foreground text-sm">
@@ -1789,6 +1814,13 @@ export default function Works() {
         open={workDetailOpen}
         onOpenChange={setWorkDetailOpen}
         work={selectedWork}
+      />
+
+      {/* Translator Info Modal */}
+      <TranslatorInfoModal
+        translator={selectedTranslator}
+        open={translatorModalOpen}
+        onOpenChange={setTranslatorModalOpen}
       />
 
       {/* Delete Confirmation Dialog */}

@@ -26,10 +26,22 @@ class TranslationContract(models.Model):
         verbose_name='Tác phẩm'
     )
     translator = models.ForeignKey(
-        User,
+        'translators.Translator',
         on_delete=models.CASCADE,
         related_name='contracts',
-        verbose_name='Dịch giả'
+        verbose_name='Dịch giả',
+        null=True,
+        blank=True
+    )
+    # Keep old translator_user field for backward compatibility during migration
+    translator_user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name='old_contracts',
+        verbose_name='Dịch giả (User - deprecated)',
+        null=True,
+        blank=True,
+        help_text='Deprecated: Sử dụng translator thay thế'
     )
     
     # Terms
