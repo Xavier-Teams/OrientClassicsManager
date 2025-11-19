@@ -8,7 +8,9 @@ import {
   Settings,
   LayoutDashboard,
   Users,
-  Bot
+  Bot,
+  Shield,
+  Languages
 } from "lucide-react";
 import {
   Sidebar,
@@ -24,6 +26,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Link, useLocation } from "wouter";
 import { APP_NAME_SHORT } from "@/lib/constants";
+import { useAuth } from "@/contexts/AuthContext";
+import { canManageUsers, canManageTranslators } from "@/lib/permissions";
 
 const menuItems = [
   {
@@ -70,29 +74,53 @@ const menuItems = [
   },
 ];
 
-const bottomMenuItems = [
-  {
-    title: "Người dùng",
-    url: "/users",
-    icon: Users,
-    testId: "nav-users",
-  },
-  {
-    title: "Trợ lý AI",
-    url: "/ai-assistant",
-    icon: Bot,
-    testId: "nav-ai",
-  },
-  {
-    title: "Cài đặt",
-    url: "/settings",
-    icon: Settings,
-    testId: "nav-settings",
-  },
-];
-
 export function AppSidebar() {
   const [location] = useLocation();
+  const { user } = useAuth();
+  
+  const canManage = canManageUsers(user);
+  const canManageTranslatorsList = canManageTranslators(user);
+
+  const bottomMenuItems = [
+    {
+      title: "Người dùng",
+      url: "/users",
+      icon: Users,
+      testId: "nav-users",
+    },
+    ...(canManage
+      ? [
+          {
+            title: "Quản trị người dùng",
+            url: "/admin/users",
+            icon: Shield,
+            testId: "nav-admin-users",
+          },
+        ]
+      : []),
+    ...(canManageTranslatorsList
+      ? [
+          {
+            title: "Danh sách dịch giả",
+            url: "/translators",
+            icon: Languages,
+            testId: "nav-translators",
+          },
+        ]
+      : []),
+    {
+      title: "Trợ lý AI",
+      url: "/ai-assistant",
+      icon: Bot,
+      testId: "nav-ai",
+    },
+    {
+      title: "Cài đặt",
+      url: "/settings",
+      icon: Settings,
+      testId: "nav-settings",
+    },
+  ];
 
   return (
     <Sidebar>

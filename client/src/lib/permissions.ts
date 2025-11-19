@@ -14,14 +14,15 @@ export type UserRole =
   | 'bien_tap_vien'
   | 'ky_thuat_vien'
   | 'dich_gia'
-  | 'chuyen_gia';
+  | 'chuyen_gia'
+  | 'phu_trach_nhan_su';
 
 export interface User {
   id: number;
   username: string;
   email: string;
   full_name: string;
-  role: UserRole;
+  role: UserRole | string; // Allow string for flexibility
   is_superuser?: boolean;
   is_staff?: boolean;
 }
@@ -173,8 +174,105 @@ export function getRoleDisplayName(role: UserRole): string {
     ky_thuat_vien: 'Kỹ thuật viên',
     dich_gia: 'Dịch giả',
     chuyen_gia: 'Chuyên gia',
+    phu_trach_nhan_su: 'Phụ trách Nhân sự',
   };
   
   return roleMap[role] || role;
+}
+
+/**
+ * Check if user is admin (can manage users)
+ * Admin (is_superuser) has highest priority, then Admin roles: chu_nhiem, pho_chu_nhiem, truong_ban_thu_ky
+ */
+export function isAdmin(user: User | null): boolean {
+  if (!user) return false;
+  // Admin (is_superuser) has highest priority - always return true first
+  if (user.is_superuser) return true;
+  
+  const adminRoles: UserRole[] = [
+    'chu_nhiem',
+    'pho_chu_nhiem',
+    'truong_ban_thu_ky',
+  ];
+  
+  return adminRoles.includes(user.role);
+}
+
+/**
+ * Check if user can create users
+ * Only admin can create users
+ */
+export function canCreateUser(user: User | null): boolean {
+  return isAdmin(user);
+}
+
+/**
+ * Check if user can edit a specific user
+ * Admin can edit all, regular users can only edit themselves
+ */
+export function canEditUser(user: User | null, targetUserId?: number): boolean {
+  if (!user) return false;
+  if (isAdmin(user)) return true;
+  
+  // Regular users can only edit themselves
+  return targetUserId === user.id;
+}
+
+/**
+ * Check if user can activate/deactivate users
+ * Only admin can activate/deactivate users
+ */
+export function canManageUserStatus(user: User | null): boolean {
+  return isAdmin(user);
+}
+
+/**
+ * Check if user can view full user information
+ * Admin can see all full info, regular users can see their own full info
+ */
+export function canViewFullUserInfo(user: User | null, targetUserId?: number): boolean {
+  if (!user) return false;
+  if (isAdmin(user)) return true;
+  
+  // Regular users can see their own full info
+  return targetUserId === user.id;
+}
+
+/**
+ * Check if user can manage users (admin panel)
+ * Allowed: Admin (is_superuser) has highest priority, then Admin roles (chu_nhiem, pho_chu_nhiem, truong_ban_thu_ky) and phu_trach_nhan_su
+ */
+export function canManageUsers(user: User | null): boolean {
+  if (!user) return false;
+  // Admin (is_superuser) has highest priority - always return true first
+  if (user.is_superuser) return true;
+
+  const allowedRoles: UserRole[] = [
+    'chu_nhiem',
+    'pho_chu_nhiem',
+    'truong_ban_thu_ky',
+    'phu_trach_nhan_su',
+  ];
+
+  return allowedRoles.includes(user.role);
+}
+
+/**
+ * Check if user can manage translators
+ * Allowed: Admin (is_superuser) has highest priority, then Admin roles (chu_nhiem, pho_chu_nhiem, truong_ban_thu_ky) and thu_ky_hop_phan
+ */
+export function canManageTranslators(user: User | null): boolean {
+  if (!user) return false;
+  // Admin (is_superuser) has highest priority - always return true first
+  if (user.is_superuser) return true;
+
+  const allowedRoles: UserRole[] = [
+    'chu_nhiem',
+    'pho_chu_nhiem',
+    'truong_ban_thu_ky',
+    'thu_ky_hop_phan',
+  ];
+
+  return allowedRoles.includes(user.role);
 }
 

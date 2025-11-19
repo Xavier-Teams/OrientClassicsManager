@@ -8,6 +8,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   setUser: (user: User | null) => void;
+  login: (username: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -19,31 +20,70 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Try to get current user from API
-    // For now, we'll use a mock user or get from localStorage
     const loadUser = async () => {
       try {
-        // TODO: Replace with actual auth check API
-        // const currentUser = await apiClient.getCurrentUser();
-        // setUser(currentUser);
+        // Check if we have a token
+        const accessToken = localStorage.getItem("access_token") || 
+                           localStorage.getItem("token") || 
+                           localStorage.getItem("accessToken");
+        const refreshToken = localStorage.getItem("refresh_token");
         
-        // For development: Check localStorage or use mock
-        const savedUser = localStorage.getItem("currentUser");
-        if (savedUser) {
-          setUser(JSON.parse(savedUser));
+        // If we have refresh token but no access token, try to refresh
+        if (refreshToken && !accessToken) {
+          console.log("No access token but have refresh token, attempting refresh...");
+          try {
+            const newAccessToken = await apiClient.refreshToken();
+            if (newAccessToken) {
+              // Retry getting user with new token
+              try {
+                const currentUser = await apiClient.getCurrentUser();
+                setUser(currentUser);
+                localStorage.setItem("currentUser", JSON.stringify(currentUser));
+                setIsLoading(false);
+                return;
+              } catch (error) {
+                console.warn("Failed to get user after token refresh:", error);
+              }
+            }
+          } catch (error) {
+            console.warn("Failed to refresh token:", error);
+          }
+        }
+        
+        if (accessToken) {
+          // Try to get current user from API
+          try {
+            const currentUser = await apiClient.getCurrentUser();
+            setUser(currentUser);
+            localStorage.setItem("currentUser", JSON.stringify(currentUser));
+          } catch (error) {
+            // If API call fails, try localStorage fallback
+            console.warn("Failed to get user from API, using localStorage:", error);
+            const savedUser = localStorage.getItem("currentUser");
+            if (savedUser) {
+              try {
+                setUser(JSON.parse(savedUser));
+              } catch (parseError) {
+                console.error("Failed to parse saved user:", parseError);
+              }
+            }
+          }
         } else {
-          // Mock user for development - remove in production
-          const mockUser: User = {
-            id: 1,
-            username: "admin",
-            email: "admin@orientclassics.vn",
-            full_name: "Administrator",
-            role: "thu_ky_hop_phan",
-            active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-          setUser(mockUser);
-          localStorage.setItem("currentUser", JSON.stringify(mockUser));
+          // No token, check localStorage for saved user (but don't trust it for auth)
+          const savedUser = localStorage.getItem("currentUser");
+          if (savedUser) {
+            try {
+              // Only use saved user if we have refresh token (token might have expired)
+              if (refreshToken) {
+                setUser(JSON.parse(savedUser));
+              } else {
+                // No tokens at all, clear saved user
+                localStorage.removeItem("currentUser");
+              }
+            } catch (parseError) {
+              console.error("Failed to parse saved user:", parseError);
+            }
+          }
         }
       } catch (error) {
         console.error("Failed to load user:", error);
@@ -55,13 +95,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadUser();
   }, []);
 
+  const login = async (username: string, password: string): Promise<void> => {
+    const response = await apiClient.login(username, password);
+    if (response.user) {
+      setUser(response.user);
+      localStorage.setItem("currentUser", JSON.stringify(response.user));
+    }
+  };
+
   const logout = () => {
     setUser(null);
     localStorage.removeItem("currentUser");
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("token");
+    localStorage.removeItem("accessToken");
+    // Also call API logout if available
+    apiClient.logout().catch(console.error);
+  };
+
+  // Always provide the context value, even if there's an error
+  const contextValue: AuthContextType = {
+    user,
+    isLoading,
+    setUser,
+    login,
+    logout,
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, setUser, logout }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

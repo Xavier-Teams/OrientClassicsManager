@@ -18,7 +18,7 @@ def api_root(request):
             'works_board': '/api/v1/works/board/',
             'works_parts': '/api/v1/works/parts/',
             'auth': '/api/v1/auth/',
-            'translators': '/api/v1/auth/users/translators/',
+            'translators': '/api/v1/translators/',
             'contracts': '/api/v1/contracts/',
             'reviews': '/api/v1/reviews/',
             'editing': '/api/v1/editing/',
@@ -35,6 +35,7 @@ urlpatterns = [
     path('', api_root, name='api-root'),  # Root endpoint
     path('admin/', admin.site.urls),
     path('api/v1/auth/', include('users.urls')),
+    path('api/v1/translators/', include('translators.urls')),
     path('api/v1/works/', include('works.urls')),  # Includes /parts/ and /works/
     path('api/v1/contracts/', include('contracts.urls')),
     path('api/v1/reviews/', include('reviews.urls')),

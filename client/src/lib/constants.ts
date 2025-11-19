@@ -86,6 +86,7 @@ export const USER_ROLE_LABELS: Record<string, string> = {
   ky_thuat_vien: "Kỹ thuật viên",
   dich_gia: "Dịch giả",
   chuyen_gia: "Chuyên gia",
+  phu_trach_nhan_su: "Phụ trách Nhân sự",
 };
 
 export const PRIORITY_LABELS: Record<string, string> = {

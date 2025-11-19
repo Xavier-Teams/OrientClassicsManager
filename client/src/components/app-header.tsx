@@ -1,4 +1,5 @@
-import { Bell, Search, User } from "lucide-react";
+import { Bell, Search, User, LogOut, Settings } from "lucide-react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -13,8 +14,25 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { useAuth } from "@/contexts/AuthContext";
+import { getRoleDisplayName } from "@/lib/permissions";
 
 export function AppHeader() {
+  const { user, logout } = useAuth();
+  const [, setLocation] = useLocation();
+
+  const handleLogout = () => {
+    logout();
+    setLocation("/login");
+  };
+
+  const handleProfileClick = () => {
+    setLocation("/users");
+  };
+
+  const handleSettingsClick = () => {
+    setLocation("/settings");
+  };
   return (
     <header className="sticky top-0 z-50 flex h-16 items-center gap-4 border-b bg-background px-6">
       <div className="flex items-center gap-2">
@@ -59,7 +77,10 @@ export function AppHeader() {
               data-testid="button-user-menu"
             >
               <Avatar className="h-10 w-10">
-                <AvatarImage src="/avatar.png" alt="User" />
+                <AvatarImage 
+                  src={user?.avatar || `/avatar-${user?.id || 0}.png`} 
+                  alt={user?.full_name || "User"} 
+                />
                 <AvatarFallback>
                   <User className="h-5 w-5" />
                 </AvatarFallback>
@@ -69,21 +90,36 @@ export function AppHeader() {
           <DropdownMenuContent className="w-56" align="end" forceMount>
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">Nguyễn Văn A</p>
+                <p className="text-sm font-medium leading-none">
+                  {user?.full_name || "Người dùng"}
+                </p>
                 <p className="text-xs leading-none text-muted-foreground">
-                  Thư ký hợp phần
+                  {user?.role ? getRoleDisplayName(user.role as any) : "Chưa đăng nhập"}
                 </p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem data-testid="menu-item-profile">
+            <DropdownMenuItem 
+              data-testid="menu-item-profile"
+              onClick={handleProfileClick}
+            >
+              <User className="mr-2 h-4 w-4" />
               Hồ sơ cá nhân
             </DropdownMenuItem>
-            <DropdownMenuItem data-testid="menu-item-settings">
+            <DropdownMenuItem 
+              data-testid="menu-item-settings"
+              onClick={handleSettingsClick}
+            >
+              <Settings className="mr-2 h-4 w-4" />
               Cài đặt
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem data-testid="menu-item-logout" className="text-destructive">
+            <DropdownMenuItem 
+              data-testid="menu-item-logout" 
+              className="text-destructive"
+              onClick={handleLogout}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
               Đăng xuất
             </DropdownMenuItem>
           </DropdownMenuContent>
