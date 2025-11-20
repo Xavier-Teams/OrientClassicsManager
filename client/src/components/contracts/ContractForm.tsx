@@ -36,8 +36,8 @@ import { Loader2, Plus, Edit, FileText, Upload, X } from "lucide-react";
 import { WorkQuickCreateForm } from "./WorkQuickCreateForm";
 import { ContractPreview } from "./ContractPreview";
 import { WordEditor } from "./WordEditor";
-import { apiClient } from "@/lib/api";
-import { useQueryClient } from "@tanstack/react-query";
+import { apiClient, ContractTemplate } from "@/lib/api";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
   formatVietnameseNumber,
@@ -48,7 +48,7 @@ import {
 } from "@/lib/utils";
 
 // Form values type
-type ContractFormValues = {
+export type ContractFormValues = {
   contract_number: string;
   work: number | null;
   work_name_input: string; // For creating new work
@@ -121,6 +121,21 @@ export function ContractForm({
   const [contractFilePreview, setContractFilePreview] = useState<string | null>(
     null
   );
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(
+    null
+  );
+
+  // Fetch templates
+  const { data: templatesData } = useQuery<{
+    count: number;
+    results: ContractTemplate[];
+  }>({
+    queryKey: ["contractTemplates"],
+    queryFn: () => apiClient.getContractTemplates({ page_size: 1000 }),
+  });
+
+  const templates = templatesData?.results || [];
+  const defaultTemplate = templates.find((t) => t.is_default);
 
   const form = useForm<ContractFormValues>({
     defaultValues: {
@@ -284,9 +299,46 @@ export function ContractForm({
       if (work) {
         form.setValue("base_page_count", work.page_count || 0);
         // You might want to load unit price from work or contract settings
+
+        // Auto-select template based on translation part
+        if (
+          work.translation_part_code &&
+          templates.length > 0 &&
+          !selectedTemplateId
+        ) {
+          // Try to find template matching translation part
+          const matchingTemplate = templates.find(
+            (t) => t.translation_part === work.translation_part_code
+          );
+          if (matchingTemplate) {
+            setSelectedTemplateId(matchingTemplate.id);
+          } else if (defaultTemplate) {
+            // Fallback to default template
+            setSelectedTemplateId(defaultTemplate.id);
+          }
+        }
       }
     }
-  }, [selectedWorkId, works, form]);
+  }, [
+    selectedWorkId,
+    works,
+    form,
+    templates,
+    selectedTemplateId,
+    defaultTemplate,
+  ]);
+
+  // Auto-select default template when form opens (if no template selected and no work selected)
+  useEffect(() => {
+    if (
+      !contract &&
+      !selectedTemplateId &&
+      defaultTemplate &&
+      templates.length > 0
+    ) {
+      setSelectedTemplateId(defaultTemplate.id);
+    }
+  }, [contract, selectedTemplateId, defaultTemplate, templates]);
 
   // Reset form when contract changes or dialog opens/closes
   useEffect(() => {
@@ -805,6 +857,35 @@ export function ContractForm({
                       </FormItem>
                     )}
                   />
+
+                  {/* Template Selection */}
+                  <FormItem>
+                    <FormLabel>Mẫu hợp đồng (tùy chọn)</FormLabel>
+                    <Select
+                      value={selectedTemplateId?.toString() || ""}
+                      onValueChange={(value) => {
+                        setSelectedTemplateId(value ? parseInt(value) : null);
+                      }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Chọn mẫu hợp đồng" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Không sử dụng mẫu</SelectItem>
+                        {templates.map((template) => (
+                          <SelectItem
+                            key={template.id}
+                            value={template.id.toString()}>
+                            {template.name}
+                            {template.is_default && " (Mặc định)"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Chọn mẫu hợp đồng để áp dụng khi tạo hợp đồng. Mẫu sẽ tự
+                      động điền các thông tin vào hợp đồng.
+                    </FormDescription>
+                  </FormItem>
 
                   <div className="grid grid-cols-2 gap-4">
                     <FormField

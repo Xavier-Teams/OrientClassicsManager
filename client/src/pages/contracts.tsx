@@ -534,13 +534,22 @@ export default function Contracts() {
             Theo dõi và quản lý hợp đồng dịch thuật
           </p>
         </div>
-        <Button
-          data-testid="button-add-contract"
-          className="gap-2"
-          onClick={handleCreateContract}>
-          <Plus className="h-4 w-4" />
-          Tạo hợp đồng
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => (window.location.href = "/contracts/templates")}>
+            <FileText className="h-4 w-4" />
+            Quản lý mẫu hợp đồng
+          </Button>
+          <Button
+            data-testid="button-add-contract"
+            className="gap-2"
+            onClick={handleCreateContract}>
+            <Plus className="h-4 w-4" />
+            Tạo hợp đồng
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">

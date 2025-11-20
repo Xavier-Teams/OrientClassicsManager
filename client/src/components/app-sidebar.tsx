@@ -49,6 +49,12 @@ const menuItems = [
     testId: "nav-contracts",
   },
   {
+    title: "Mẫu hợp đồng",
+    url: "/contracts/templates",
+    icon: FileText,
+    testId: "nav-contract-templates",
+  },
+  {
     title: "Thanh toán",
     url: "/payments",
     icon: CreditCard,

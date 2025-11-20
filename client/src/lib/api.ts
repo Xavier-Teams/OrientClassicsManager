@@ -595,7 +595,124 @@ class ApiClient {
       method: "DELETE",
     });
   }
+
+  // Contract Templates API
+  async getContractTemplates(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    translation_part?: string;
+  }): Promise<{ count: number; next: string | null; previous: string | null; results: ContractTemplate[] }> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append("page", params.page.toString());
+    if (params?.page_size) queryParams.append("page_size", params.page_size.toString());
+    if (params?.search) queryParams.append("search", params.search);
+    if (params?.translation_part) queryParams.append("translation_part", params.translation_part);
+
+    const queryString = queryParams.toString();
+    return this.request<{ count: number; next: string | null; previous: string | null; results: ContractTemplate[] }>(
+      `/api/v1/contract-templates/${queryString ? `?${queryString}` : ""}`
+    );
+  }
+
+  async getContractTemplate(id: number | string): Promise<ContractTemplate> {
+    return this.request<ContractTemplate>(`/api/v1/contract-templates/${id}/`);
+  }
+
+  async createContractTemplate(template: {
+    name: string;
+    description?: string;
+    type: "rich_text" | "word_file";
+    content?: string;
+    file?: File;
+    translation_part?: string;
+    is_default?: boolean;
+  }): Promise<ContractTemplate> {
+    const { file, ...templateData } = template;
+
+    // If there's a file, use FormData
+    if (file instanceof File) {
+      const formData = new FormData();
+      Object.entries(templateData).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          formData.append(key, String(value));
+        }
+      });
+      formData.append("file", file);
+
+      return this.request<ContractTemplate>("/api/v1/contract-templates/", {
+        method: "POST",
+        body: formData,
+      });
+    }
+
+    // Otherwise use JSON
+    return this.request<ContractTemplate>("/api/v1/contract-templates/", {
+      method: "POST",
+      body: JSON.stringify(templateData),
+    });
+  }
+
+  async updateContractTemplate(id: number | string, template: {
+    name?: string;
+    description?: string;
+    type?: "rich_text" | "word_file";
+    content?: string;
+    file?: File;
+    translation_part?: string;
+    is_default?: boolean;
+  }): Promise<ContractTemplate> {
+    const { file, ...templateData } = template;
+
+    // If there's a file, use FormData
+    if (file instanceof File) {
+      const formData = new FormData();
+      Object.entries(templateData).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          formData.append(key, String(value));
+        }
+      });
+      formData.append("file", file);
+
+      return this.request<ContractTemplate>(`/api/v1/contract-templates/${id}/`, {
+        method: "PATCH",
+        body: formData,
+      });
+    }
+
+    // Otherwise use JSON
+    return this.request<ContractTemplate>(`/api/v1/contract-templates/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(templateData),
+    });
+  }
+
+  async deleteContractTemplate(id: number | string): Promise<void> {
+    return this.request<void>(`/api/v1/contract-templates/${id}/`, {
+      method: "DELETE",
+    });
+  }
+
+  async generateContractFromTemplate(
+    templateId: number | string,
+    contractData: any, // ContractFormValues from ContractForm
+    work?: Work,
+    translator?: Translator
+  ): Promise<Blob> {
+    return this.request<Blob>(`/api/v1/contract-templates/${templateId}/generate/`, {
+      method: "POST",
+      body: JSON.stringify({
+        contract_data: contractData,
+        work: work,
+        translator: translator,
+      }),
+      responseType: "blob",
+    });
+  }
 }
+
+// Export ContractFormValues type for use in other files
+export type { ContractFormValues } from "@/components/contracts/ContractForm";
 
 export interface User {
   id: number; // Django returns integer ID
@@ -656,6 +773,21 @@ export interface Contract {
   status: string;
   contract_file?: string;
   signed_at?: string;
+  created_at: string;
+  updated_at: string;
+  created_by?: number;
+}
+
+export interface ContractTemplate {
+  id: number;
+  name: string;
+  description?: string;
+  type: "rich_text" | "word_file"; // Loại template: rich text editor hoặc file Word
+  content?: string; // HTML content cho rich text editor
+  file_url?: string; // URL của file Word template
+  file_name?: string; // Tên file Word
+  is_default?: boolean; // Template mặc định
+  translation_part?: string; // Hợp phần áp dụng (optional)
   created_at: string;
   updated_at: string;
   created_by?: number;

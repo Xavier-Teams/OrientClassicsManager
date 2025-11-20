@@ -215,6 +215,29 @@ export const contracts = pgTable("contracts", {
 }));
 
 // ============================================================================
+// CONTRACT TEMPLATES (Mẫu hợp đồng)
+// ============================================================================
+
+export const contractTemplates = pgTable("contract_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  type: varchar("type").notNull(), // "rich_text" or "word_file"
+  content: text("content"), // HTML content for rich_text type
+  fileUrl: text("file_url"), // URL of Word file for word_file type
+  fileName: text("file_name"), // Name of uploaded file
+  translationPart: varchar("translation_part"), // Optional: which translation part this template applies to
+  isDefault: boolean("is_default").notNull().default(false),
+  createdById: varchar("created_by_id").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  typeIdx: index("template_type_idx").on(table.type),
+  translationPartIdx: index("template_translation_part_idx").on(table.translationPart),
+  isDefaultIdx: index("template_is_default_idx").on(table.isDefault),
+}));
+
+// ============================================================================
 // PAYMENT MILESTONES (Mốc thanh toán)
 // ============================================================================
 
@@ -518,6 +541,14 @@ export const contractsRelations = relations(contracts, ({ one, many }) => ({
   payments: many(payments, { relationName: "contractPayments" }),
 }));
 
+export const contractTemplatesRelations = relations(contractTemplates, ({ one }) => ({
+  creator: one(users, {
+    fields: [contractTemplates.createdById],
+    references: [users.id],
+    relationName: "templateCreator",
+  }),
+}));
+
 export const paymentMilestonesRelations = relations(paymentMilestones, ({ one, many }) => ({
   contract: one(contracts, {
     fields: [paymentMilestones.contractId],
@@ -691,6 +722,14 @@ export const insertContractSchema = createInsertSchema(contracts, {
 
 export const selectContractSchema = createSelectSchema(contracts);
 
+// Contract Templates
+export const insertContractTemplateSchema = createInsertSchema(contractTemplates, {
+  name: z.string().min(1),
+  type: z.enum(["rich_text", "word_file"]),
+}).omit({ id: true, createdAt: true, updatedAt: true });
+
+export const selectContractTemplateSchema = createSelectSchema(contractTemplates);
+
 // Payment Milestones
 export const insertPaymentMilestoneSchema = createInsertSchema(paymentMilestones, {
   amount: z.number().int().min(0),
@@ -798,6 +837,9 @@ export type InsertWork = z.infer<typeof insertWorkSchema>;
 export type Contract = typeof contracts.$inferSelect;
 export type InsertContract = z.infer<typeof insertContractSchema>;
 
+export type ContractTemplate = typeof contractTemplates.$inferSelect;
+export type InsertContractTemplate = z.infer<typeof insertContractTemplateSchema>;
+
 export type PaymentMilestone = typeof paymentMilestones.$inferSelect;
 export type InsertPaymentMilestone = z.infer<typeof insertPaymentMilestoneSchema>;
 
@@ -841,6 +883,7 @@ export type InsertAIInteraction = z.infer<typeof insertAIInteractionSchema>;
 export const updateUserSchema = insertUserSchema.partial();
 export const updateWorkSchema = insertWorkSchema.partial();
 export const updateContractSchema = insertContractSchema.partial();
+export const updateContractTemplateSchema = insertContractTemplateSchema.partial();
 export const updatePaymentSchema = insertPaymentSchema.partial();
 export const updateReviewSchema = insertReviewSchema.partial();
 export const updateReviewCouncilSchema = insertReviewCouncilSchema.partial();

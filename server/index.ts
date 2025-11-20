@@ -15,7 +15,9 @@ app.use(express.json({
     req.rawBody = buf;
   }
 }));
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: true }));
+// Serve uploaded files
+app.use("/uploads", express.static("uploads"));
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -54,8 +56,12 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
+    console.error("Error:", err);
     res.status(status).json({ message });
-    throw err;
+    // Don't throw in production to avoid crashing the server
+    if (process.env.NODE_ENV === "development") {
+      console.error("Stack:", err.stack);
+    }
   });
 
   // importantly only setup vite in development and after

@@ -6,6 +6,7 @@ import {
   insertUserSchema,
   insertWorkSchema,
   insertContractSchema,
+  insertContractTemplateSchema,
   insertPaymentSchema,
   insertReviewSchema,
   insertReviewCouncilSchema,
@@ -14,12 +15,16 @@ import {
   updateUserSchema,
   updateWorkSchema,
   updateContractSchema,
+  updateContractTemplateSchema,
   updatePaymentSchema,
   updateReviewSchema,
   updateReviewCouncilSchema,
   updateEditingTaskSchema,
   updateAdministrativeTaskSchema,
 } from "@shared/schema";
+import path from "path";
+import fs from "fs/promises";
+import { uploadMiddleware } from "./middleware/upload";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -571,6 +576,211 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Admin task not found" });
       }
       res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================================================
+  // CONTRACT TEMPLATES
+  // ============================================================================
+  
+  app.get("/api/v1/contract-templates", async (req, res) => {
+    try {
+      const filters = {
+        search: req.query.search as string | undefined,
+        translationPart: req.query.translation_part as string | undefined,
+      };
+      const templates = await storage.getContractTemplates(filters);
+      res.json({ count: templates.length, results: templates });
+    } catch (error: any) {
+      console.error("Error fetching contract templates:", error);
+      res.status(500).json({ 
+        error: error.message || "Internal server error",
+        details: process.env.NODE_ENV === "development" ? error.stack : undefined
+      });
+    }
+  });
+
+  app.get("/api/v1/contract-templates/:id", async (req, res) => {
+    try {
+      const template = await storage.getContractTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(template);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/v1/contract-templates", uploadMiddleware(), async (req: any, res) => {
+    try {
+      const body = req.body;
+      const files = req.files;
+      
+      const templateData: any = {
+        name: body.name,
+        description: body.description || null,
+        type: body.type,
+        translationPart: body.translation_part || null,
+        isDefault: body.is_default === true || body.is_default === "true",
+      };
+
+      if (body.type === "rich_text") {
+        templateData.content = body.content || "";
+      } else if (body.type === "word_file") {
+        if (files?.file && files.file.length > 0) {
+          const uploadedFile = files.file[0];
+          // Store relative path from project root
+          const relativePath = path.relative(process.cwd(), uploadedFile.filepath);
+          templateData.fileUrl = `/${relativePath.replace(/\\/g, "/")}`;
+          templateData.fileName = uploadedFile.originalFilename || "template.docx";
+        } else if (body.file_url) {
+          templateData.fileUrl = body.file_url;
+          templateData.fileName = body.file_name || "template.docx";
+        }
+      }
+
+      const validatedData = insertContractTemplateSchema.parse(templateData);
+      const template = await storage.createContractTemplate(validatedData);
+      res.status(201).json(template);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/v1/contract-templates/:id", uploadMiddleware(), async (req: any, res) => {
+    try {
+      const body = req.body;
+      const files = req.files;
+
+      const templateData: any = {};
+      if (body.name) templateData.name = body.name;
+      if (body.description !== undefined) templateData.description = body.description;
+      if (body.type) templateData.type = body.type;
+      if (body.translation_part !== undefined) templateData.translationPart = body.translation_part;
+      if (body.is_default !== undefined) templateData.isDefault = body.is_default === true || body.is_default === "true";
+
+      if (body.type === "rich_text" && body.content !== undefined) {
+        templateData.content = body.content;
+      } else if (body.type === "word_file") {
+        if (files?.file && files.file.length > 0) {
+          const uploadedFile = files.file[0];
+          // Delete old file if exists
+          const oldTemplate = await storage.getContractTemplate(req.params.id);
+          if (oldTemplate?.fileUrl) {
+            try {
+              const oldFilePath = path.join(process.cwd(), oldTemplate.fileUrl.replace(/^\//, ""));
+              await fs.unlink(oldFilePath);
+            } catch (err) {
+              // Ignore if file doesn't exist
+            }
+          }
+          // Store relative path from project root
+          const relativePath = path.relative(process.cwd(), uploadedFile.filepath);
+          templateData.fileUrl = `/${relativePath.replace(/\\/g, "/")}`;
+          templateData.fileName = uploadedFile.originalFilename || "template.docx";
+        } else if (body.file_url) {
+          templateData.fileUrl = body.file_url;
+          templateData.fileName = body.file_name || "template.docx";
+        }
+      }
+
+      const validatedData = updateContractTemplateSchema.parse(templateData);
+      const template = await storage.updateContractTemplate(req.params.id, validatedData);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(template);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/v1/contract-templates/:id", async (req, res) => {
+    try {
+      // Get template to delete file if exists
+      const template = await storage.getContractTemplate(req.params.id);
+      if (template?.fileUrl) {
+        try {
+          const filePath = path.join(process.cwd(), template.fileUrl.replace(/^\//, ""));
+          await fs.unlink(filePath);
+        } catch (err) {
+          // Ignore if file doesn't exist
+        }
+      }
+
+      const success = await storage.deleteContractTemplate(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/v1/contract-templates/:id/generate", async (req, res) => {
+    try {
+      const template = await storage.getContractTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+
+      const { contract_data, work, translator } = req.body;
+
+      if (template.type === "rich_text") {
+        // Generate Word from HTML content
+        const { mergeTemplateContent } = await import("../lib/contractTemplateMerge");
+        const mergedContent = mergeTemplateContent(
+          template.content || "",
+          contract_data,
+          work,
+          translator
+        );
+        
+        // TODO: Convert HTML to Word document using html-docx-js or similar
+        // For now, return HTML content
+        res.setHeader("Content-Type", "text/html");
+        res.setHeader("Content-Disposition", `attachment; filename="Hop-dong-${contract_data.contract_number || "dich-thuat"}.html"`);
+        res.send(mergedContent);
+      } else if (template.type === "word_file" && template.fileUrl) {
+        // Merge data into Word template using docxtemplater
+        try {
+          const filePath = path.join(process.cwd(), template.fileUrl.replace(/^\//, ""));
+          
+          // Check if file exists
+          try {
+            await fs.access(filePath);
+          } catch {
+            return res.status(404).json({ error: "Template file not found" });
+          }
+
+          const { mergeWordTemplate } = await import("../lib/wordTemplateMerge");
+          const mergedBuffer = await mergeWordTemplate(
+            filePath,
+            contract_data,
+            work,
+            translator
+          );
+
+          res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+          res.setHeader("Content-Disposition", `attachment; filename="Hop-dong-${contract_data.contract_number || "dich-thuat"}.docx"`);
+          res.send(mergedBuffer);
+        } catch (fileError: any) {
+          console.error("Error merging Word template:", fileError);
+          res.status(500).json({ error: fileError.message || "Failed to merge template" });
+        }
+      } else {
+        res.status(400).json({ error: "Template has no content or file" });
+      }
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

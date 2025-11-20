@@ -8,6 +8,8 @@ import type {
   InsertWork,
   Contract,
   InsertContract,
+  ContractTemplate,
+  InsertContractTemplate,
   Payment,
   InsertPayment,
   Review,
@@ -44,6 +46,12 @@ export interface IStorage {
   createContract(contract: InsertContract): Promise<Contract>;
   updateContract(id: string, contract: Partial<InsertContract>): Promise<Contract | undefined>;
   deleteContract(id: string): Promise<boolean>;
+
+  getContractTemplates(filters?: { search?: string; translationPart?: string }): Promise<ContractTemplate[]>;
+  getContractTemplate(id: string): Promise<ContractTemplate | undefined>;
+  createContractTemplate(template: InsertContractTemplate): Promise<ContractTemplate>;
+  updateContractTemplate(id: string, template: Partial<InsertContractTemplate>): Promise<ContractTemplate | undefined>;
+  deleteContractTemplate(id: string): Promise<boolean>;
 
   getPayments(filters?: { status?: string; contractId?: string }): Promise<Payment[]>;
   getPayment(id: string): Promise<Payment | undefined>;
@@ -393,6 +401,61 @@ export class PostgresStorage implements IStorage {
 
   async deleteAdminTask(id: string): Promise<boolean> {
     const result = await db.delete(schema.administrativeTasks).where(eq(schema.administrativeTasks.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Contract Templates
+  async getContractTemplates(filters?: { search?: string; translationPart?: string }): Promise<ContractTemplate[]> {
+    try {
+      let query = db.select().from(schema.contractTemplates).$dynamic();
+
+      const conditions: any[] = [];
+      if (filters?.search) {
+        conditions.push(
+          sql`${schema.contractTemplates.name} ILIKE ${`%${filters.search}%`} OR ${schema.contractTemplates.description} ILIKE ${`%${filters.search}%`}`
+        );
+      }
+      if (filters?.translationPart) {
+        conditions.push(eq(schema.contractTemplates.translationPart, filters.translationPart));
+      }
+
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions));
+      }
+
+      return query.orderBy(desc(schema.contractTemplates.createdAt));
+    } catch (error: any) {
+      console.error("Error in getContractTemplates:", error);
+      // If table doesn't exist, return empty array instead of throwing
+      if (error.message?.includes("does not exist") || error.message?.includes("relation") || error.code === "42P01") {
+        console.warn("contract_templates table does not exist. Please run database migration.");
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  async getContractTemplate(id: string): Promise<ContractTemplate | undefined> {
+    const [template] = await db.select().from(schema.contractTemplates).where(eq(schema.contractTemplates.id, id));
+    return template;
+  }
+
+  async createContractTemplate(insertTemplate: InsertContractTemplate): Promise<ContractTemplate> {
+    const [template] = await db.insert(schema.contractTemplates).values(insertTemplate).returning();
+    return template;
+  }
+
+  async updateContractTemplate(id: string, templateData: Partial<InsertContractTemplate>): Promise<ContractTemplate | undefined> {
+    const [template] = await db
+      .update(schema.contractTemplates)
+      .set({ ...templateData, updatedAt: new Date() })
+      .where(eq(schema.contractTemplates.id, id))
+      .returning();
+    return template;
+  }
+
+  async deleteContractTemplate(id: string): Promise<boolean> {
+    const result = await db.delete(schema.contractTemplates).where(eq(schema.contractTemplates.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
   }
 }

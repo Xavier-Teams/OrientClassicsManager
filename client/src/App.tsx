@@ -10,6 +10,8 @@ import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import Works from "@/pages/works";
 import Contracts from "@/pages/contracts";
+import ContractTemplates from "@/pages/contract-templates";
+import ContractTemplateEditorPage from "@/pages/contract-template-editor";
 import Payments from "@/pages/payments";
 import Reviews from "@/pages/reviews";
 import Editing from "@/pages/editing";
@@ -58,6 +60,8 @@ function Router() {
                 <Route path="/" component={Dashboard} />
                 <Route path="/works" component={Works} />
                 <Route path="/contracts" component={Contracts} />
+                <Route path="/contracts/templates" component={ContractTemplates} />
+                <Route path="/contracts/templates/editor" component={ContractTemplateEditorPage} />
                 <Route path="/payments" component={Payments} />
                 <Route path="/reviews" component={Reviews} />
                 <Route path="/editing" component={Editing} />
