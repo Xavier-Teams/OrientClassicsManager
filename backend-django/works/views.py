@@ -4,11 +4,12 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.db.models import Count, Q, Avg
 from django.db import models
-from .models import TranslationWork, TranslationPart
+from .models import TranslationWork, TranslationPart, Stage
 from .serializers import (
     TranslationWorkSerializer,
     TranslationPartSerializer,
-    TranslationPartDetailSerializer
+    TranslationPartDetailSerializer,
+    StageSerializer
 )
 from .permissions import WorkPermission
 
@@ -212,3 +213,15 @@ class TranslationWorkViewSet(viewsets.ModelViewSet):
             board_data[status_code] = serializer.data
         
         return Response(board_data)
+
+
+class StageViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for Stage (read-only, stages are managed by admin)
+    """
+    queryset = Stage.objects.filter(is_active=True).order_by('order')
+    serializer_class = StageSerializer
+    permission_classes = [AllowAny]  # TODO: Change to [IsAuthenticated] in production
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['order', 'name']
+    ordering = ['order']

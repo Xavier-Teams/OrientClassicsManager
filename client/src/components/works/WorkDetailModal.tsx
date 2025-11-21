@@ -119,6 +119,13 @@ export function WorkDetailModal({
                   </div>
 
                   <div>
+                    <p className="text-sm font-medium">Giai đoạn</p>
+                    <p className="text-sm text-muted-foreground">
+                      {work.stage_name || "Chưa gán"}
+                    </p>
+                  </div>
+
+                  <div>
                     <p className="text-sm font-medium">Dịch giả</p>
                     <p className="text-sm text-muted-foreground">
                       {work.translator_name ? (

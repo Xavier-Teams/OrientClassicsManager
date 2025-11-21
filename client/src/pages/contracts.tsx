@@ -67,6 +67,7 @@ import { CONTRACT_STATUS_LABELS } from "@/lib/constants";
 import { apiClient, Contract, Work, Translator } from "@/lib/api";
 import { ContractForm } from "@/components/contracts/ContractForm";
 import { TranslatorInfoModal } from "@/components/translators/TranslatorInfoModal";
+import { ContractDashboard } from "@/components/contracts/ContractDashboard";
 import { useToast } from "@/hooks/use-toast";
 
 const statusColors: Record<string, string> = {
@@ -96,6 +97,7 @@ export default function Contracts() {
   const [translationPartFilter, setTranslationPartFilter] = useState<string[]>(
     []
   );
+  const [stageFilter, setStageFilter] = useState<number[]>([]);
   const [yearFilter, setYearFilter] = useState<number[]>([]);
   const [signedDateFrom, setSignedDateFrom] = useState<string>("");
   const [signedDateTo, setSignedDateTo] = useState<string>("");
@@ -150,9 +152,46 @@ export default function Contracts() {
     queryFn: () => apiClient.getTranslationParts(),
   });
 
+  // Fetch stages for filter
+  const { data: stages } = useQuery({
+    queryKey: ["stages"],
+    queryFn: () => apiClient.getStages(),
+  });
+
   const contracts = contractsData?.results || [];
   const works = worksData?.results || [];
   const translators = translatorsData?.results || [];
+  const stagesList = stages || [];
+
+  // Helper function to get stage name from contract or work
+  const getStageName = (contract: Contract): string | null => {
+    // First check contract.stage
+    if (contract.stage) {
+      const stage = stagesList.find((s) => s.id === contract.stage);
+      return stage?.name || null;
+    }
+    // Fallback to work.stage
+    const work = works.find((w) => w.id === contract.work);
+    if (work?.stage) {
+      const stage = stagesList.find((s) => s.id === work.stage);
+      return stage?.name || null;
+    }
+    return null;
+  };
+
+  // Helper function to get translation part name from contract or work
+  const getTranslationPartName = (contract: Contract): string | null => {
+    // First check contract.translation_part (code)
+    if (contract.translation_part) {
+      const part = translationParts?.find(
+        (p) => p.code === contract.translation_part
+      );
+      return part?.name || null;
+    }
+    // Fallback to work.translation_part_name
+    const work = works.find((w) => w.id === contract.work);
+    return work?.translation_part_name || null;
+  };
 
   // Get contract progress status: "new_signed" | "in_term" | "expired"
   const getContractProgressStatus = (contract: Contract): string => {
@@ -240,6 +279,19 @@ export default function Contracts() {
         }
       }
 
+      // Filter by stage
+      if (stageFilter.length > 0) {
+        // First check contract.stage, then fallback to work.stage
+        const contractStage = contract.stage;
+        const work = works.find((w) => w.id === contract.work);
+        const workStage = work?.stage;
+        const stageId = contractStage || workStage;
+
+        if (!stageId || !stageFilter.includes(stageId)) {
+          return false;
+        }
+      }
+
       // Filter by year
       if (yearFilter.length > 0) {
         const contractYear = contract.signed_at
@@ -290,6 +342,7 @@ export default function Contracts() {
   }, [
     contracts,
     translationPartFilter,
+    stageFilter,
     yearFilter,
     signedDateFrom,
     signedDateTo,
@@ -341,12 +394,23 @@ export default function Contracts() {
         contract_number: data.contract_number,
         work: data.work!,
         translator: data.translator!,
+        template: data.template_id || undefined,
         start_date: data.start_date,
         end_date: data.end_date,
+        base_page_count: data.base_page_count || 0,
+        translation_unit_price: data.translation_unit_price || 0,
+        translation_cost: data.translation_cost || 0,
+        overview_writing_cost: data.overview_writing_cost || 0,
         total_amount:
           typeof data.total_amount === "number"
             ? data.total_amount.toString()
             : data.total_amount,
+        advance_payment_1_percent: data.advance_payment_1_percent || 0,
+        advance_payment_2_percent: data.advance_payment_2_percent || 0,
+        advance_payment_include_overview:
+          data.advance_payment_include_overview || false,
+        stage: data.stage || undefined,
+        translation_part: data.translation_part || undefined,
         advance_payment_1:
           typeof data.advance_payment_1 === "number"
             ? data.advance_payment_1.toString()
@@ -355,8 +419,6 @@ export default function Contracts() {
           typeof data.advance_payment_2 === "number"
             ? data.advance_payment_2.toString()
             : data.advance_payment_2 || "0",
-        advance_payment_include_overview:
-          data.advance_payment_include_overview || false,
         final_payment:
           typeof data.final_payment === "number"
             ? data.final_payment.toString()
@@ -408,13 +470,22 @@ export default function Contracts() {
         contract_number: data.contract_number,
         work: data.work!,
         translator: data.translator!,
+        template: data.template_id || undefined,
         start_date: data.start_date,
         end_date: data.end_date,
+        base_page_count: data.base_page_count || 0,
+        translation_unit_price: data.translation_unit_price || 0,
+        translation_cost: data.translation_cost || 0,
+        overview_writing_cost: data.overview_writing_cost || 0,
         total_amount: totalAmount,
-        advance_payment_1: advance1,
-        advance_payment_2: advance2,
+        advance_payment_1_percent: data.advance_payment_1_percent || 0,
+        advance_payment_2_percent: data.advance_payment_2_percent || 0,
         advance_payment_include_overview:
           data.advance_payment_include_overview || false,
+        stage: data.stage || undefined,
+        translation_part: data.translation_part || undefined,
+        advance_payment_1: advance1,
+        advance_payment_2: advance2,
         final_payment: final,
         status: data.status,
         signed_at: data.signed_at || undefined,
@@ -643,6 +714,58 @@ export default function Contracts() {
           </PopoverContent>
         </Popover>
 
+        {/* Stage Filter */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8">
+              Giai đoạn
+              {stageFilter.length > 0 && (
+                <Badge variant="secondary" className="ml-2 h-5 px-1.5">
+                  {stageFilter.length}
+                </Badge>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Chọn giai đoạn</Label>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {stages?.map((stage) => (
+                  <div key={stage.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`stage-${stage.id}`}
+                      checked={stageFilter.includes(stage.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setStageFilter([...stageFilter, stage.id]);
+                        } else {
+                          setStageFilter(
+                            stageFilter.filter((id) => id !== stage.id)
+                          );
+                        }
+                      }}
+                    />
+                    <Label
+                      htmlFor={`stage-${stage.id}`}
+                      className="text-sm font-normal cursor-pointer">
+                      {stage.name} ({stage.code})
+                    </Label>
+                  </div>
+                ))}
+              </div>
+              {stageFilter.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full mt-2"
+                  onClick={() => setStageFilter([])}>
+                  Xóa tất cả
+                </Button>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+
         {/* Year Filter */}
         <Popover>
           <PopoverTrigger asChild>
@@ -789,6 +912,7 @@ export default function Contracts() {
 
         {/* Clear all filters */}
         {(translationPartFilter.length > 0 ||
+          stageFilter.length > 0 ||
           yearFilter.length > 0 ||
           signedDateFrom ||
           signedDateTo ||
@@ -800,6 +924,7 @@ export default function Contracts() {
             className="h-8"
             onClick={() => {
               setTranslationPartFilter([]);
+              setStageFilter([]);
               setYearFilter([]);
               setSignedDateFrom("");
               setSignedDateTo("");
@@ -875,6 +1000,7 @@ export default function Contracts() {
               {searchQuery ||
               statusFilter !== "all" ||
               translationPartFilter.length > 0 ||
+              stageFilter.length > 0 ||
               yearFilter.length > 0 ||
               signedDateFrom ||
               signedDateTo ||
@@ -914,9 +1040,25 @@ export default function Contracts() {
                               contract.status}
                           </Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          Tác phẩm: {contract.work_name || "Chưa có"}
-                        </p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm text-muted-foreground">
+                            Tác phẩm: {contract.work_name || "Chưa có"}
+                          </p>
+                          {getTranslationPartName(contract) && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs bg-secondary text-secondary-foreground border-secondary">
+                              Hợp phần: {getTranslationPartName(contract)}
+                            </Badge>
+                          )}
+                          {getStageName(contract) && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs bg-primary/10 text-primary border-primary/20">
+                              {getStageName(contract)}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -993,7 +1135,7 @@ export default function Contracts() {
                         data-testid={`button-view-${contract.id}`}
                         onClick={() => handleViewContract(contract)}>
                         <Eye className="h-4 w-4 mr-1" />
-                        Xem
+                        Chi tiết
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -1080,6 +1222,22 @@ export default function Contracts() {
                   </p>
                   <p className="text-base">
                     {selectedContract.work_name || "Chưa có"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">
+                    Hợp phần
+                  </p>
+                  <p className="text-base">
+                    {getTranslationPartName(selectedContract) || "Chưa có"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">
+                    Giai đoạn
+                  </p>
+                  <p className="text-base">
+                    {getStageName(selectedContract) || "Chưa có"}
                   </p>
                 </div>
                 <div>

@@ -32,7 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Work, User, Translator } from "@/lib/api";
+import { Work, User, Translator, Stage } from "@/lib/api";
 import { WORK_STATUS_LABELS, PRIORITY_LABELS } from "@/lib/constants";
 import { mapPriorityToDjango, mapPriorityFromDjango } from "@/lib/constants";
 
@@ -48,6 +48,7 @@ type WorkFormValues = {
   description?: string;
   translation_part_id?: number | null;
   translator_id?: number | null;
+  stage_id?: number | null;
   state: string;
   priority: string;
   translation_progress: number;
@@ -60,6 +61,7 @@ interface WorkFormProps {
   work?: Work | null;
   translators?: (User | Translator)[];
   translationParts?: Array<{ id: number; name: string; code: string }>;
+  stages?: Stage[];
   onSubmit: (data: WorkFormValues) => Promise<void>;
   isLoading?: boolean;
 }
@@ -70,6 +72,7 @@ export function WorkForm({
   work,
   translators = [],
   translationParts = [],
+  stages = [],
   onSubmit,
   isLoading = false,
 }: WorkFormProps) {
@@ -85,6 +88,7 @@ export function WorkForm({
       description: "",
       translation_part_id: null,
       translator_id: null,
+      stage_id: null,
       state: "draft",
       priority: "0",
       translation_progress: 0,
@@ -109,6 +113,7 @@ export function WorkForm({
         translator_id: work.translator
           ? parseInt(work.translator as any)
           : null,
+        stage_id: work.stage ? parseInt(work.stage as any) : null,
         state: work.state || "draft",
         priority: work.priority || "0",
         translation_progress: work.translation_progress || 0,
@@ -126,6 +131,7 @@ export function WorkForm({
         description: "",
         translation_part_id: null,
         translator_id: null,
+        stage_id: null,
         state: "draft",
         priority: "0",
         translation_progress: 0,
@@ -380,6 +386,39 @@ export function WorkForm({
                 )}
               />
 
+              <FormField
+                control={form.control}
+                name="stage_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Giai đoạn</FormLabel>
+                    <Select
+                      onValueChange={(value) =>
+                        field.onChange(value === "none" ? null : parseInt(value))
+                      }
+                      value={field.value != null ? field.value.toString() : "none"}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Chọn giai đoạn" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">Không chọn</SelectItem>
+                        {stages.map((stage) => (
+                          <SelectItem key={stage.id} value={stage.id.toString()}>
+                            {stage.name} ({stage.code})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="translator_id"

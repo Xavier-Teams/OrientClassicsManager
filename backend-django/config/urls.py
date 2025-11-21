@@ -20,6 +20,7 @@ def api_root(request):
             'auth': '/api/v1/auth/',
             'translators': '/api/v1/translators/',
             'contracts': '/api/v1/contracts/',
+            'contract_templates': '/api/v1/contract-templates/',
             'reviews': '/api/v1/reviews/',
             'editing': '/api/v1/editing/',
             'administration': '/api/v1/administration/',
@@ -38,6 +39,7 @@ urlpatterns = [
     path('api/v1/translators/', include('translators.urls')),
     path('api/v1/works/', include('works.urls')),  # Includes /parts/ and /works/
     path('api/v1/contracts/', include('contracts.urls')),
+    path('api/v1/contract-templates/', include('contracts.template_urls')),
     path('api/v1/reviews/', include('reviews.urls')),
     path('api/v1/editing/', include('editing.urls')),
     path('api/v1/administration/', include('administration.urls')),

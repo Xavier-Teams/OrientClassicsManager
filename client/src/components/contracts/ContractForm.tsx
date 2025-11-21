@@ -34,9 +34,10 @@ import { Work, Translator } from "@/lib/api";
 import { CONTRACT_STATUS_LABELS } from "@/lib/constants";
 import { Loader2, Plus, Edit, FileText, Upload, X } from "lucide-react";
 import { WorkQuickCreateForm } from "./WorkQuickCreateForm";
-import { ContractPreview } from "./ContractPreview";
+import { ContractPreviewFromTemplate } from "./ContractPreviewFromTemplate";
 import { WordEditor } from "./WordEditor";
 import { apiClient, ContractTemplate } from "@/lib/api";
+import { mergeTemplateContent } from "@/lib/contractTemplateMerge";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -46,6 +47,19 @@ import {
   formatDateToVietnamese,
   parseVietnameseDate,
 } from "@/lib/utils";
+
+// Helper function to ensure value is a number
+const ensureNumber = (value: any): number => {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    // Remove formatting and parse
+    const cleaned = value.replace(/\./g, "").replace(/,/g, "");
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : num;
+  }
+  return 0;
+};
+import { DatePicker } from "@/components/ui/date-picker";
 
 // Form values type
 export type ContractFormValues = {
@@ -72,6 +86,8 @@ export type ContractFormValues = {
   advance_payment_include_overview: boolean; // Bao gồm kinh phí bài tổng quan trong tạm ứng (áp dụng chung cho cả 2 lần)
   final_payment: number; // Quyết toán (tự động tính)
   status: string;
+  stage?: number; // Giai đoạn (1-5)
+  translation_part?: string; // Hợp phần (tự động lấy từ work nếu không chỉ định)
   signed_at?: string; // Ngày ký hợp đồng
   contract_file?: File | string; // File PDF hợp đồng (File khi upload, string khi đã có)
   // Translator details for auto-fill (read-only display)
@@ -84,6 +100,7 @@ export type ContractFormValues = {
   translator_bank_name?: string;
   translator_bank_branch?: string;
   translator_tax_code?: string;
+  template_id?: number; // ID của template được sử dụng (không lưu vào DB, chỉ dùng để generate file)
 };
 
 interface ContractFormProps {
@@ -124,6 +141,9 @@ export function ContractForm({
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(
     null
   );
+  const [editedTemplateContent, setEditedTemplateContent] = useState<
+    string | null
+  >(null);
 
   // Fetch templates
   const { data: templatesData } = useQuery<{
@@ -159,6 +179,8 @@ export function ContractForm({
       advance_payment_include_overview: false,
       final_payment: 0,
       status: "draft",
+      stage: undefined,
+      translation_part: undefined,
       signed_at: "",
       contract_file: undefined,
       translator_full_name: "",
@@ -174,11 +196,19 @@ export function ContractForm({
   });
 
   // Watch fields for auto-calculation
-  const basePageCount = form.watch("base_page_count");
-  const translationUnitPrice = form.watch("translation_unit_price");
-  const overviewWritingCost = form.watch("overview_writing_cost");
-  const advancePayment1Percent = form.watch("advance_payment_1_percent");
-  const advancePayment2Percent = form.watch("advance_payment_2_percent");
+  // Watch values and ensure they are numbers
+  const basePageCountRaw = form.watch("base_page_count");
+  const translationUnitPriceRaw = form.watch("translation_unit_price");
+  const overviewWritingCostRaw = form.watch("overview_writing_cost");
+  const advancePayment1PercentRaw = form.watch("advance_payment_1_percent");
+  const advancePayment2PercentRaw = form.watch("advance_payment_2_percent");
+
+  // Ensure all watched values are numbers
+  const basePageCount = ensureNumber(basePageCountRaw);
+  const translationUnitPrice = ensureNumber(translationUnitPriceRaw);
+  const overviewWritingCost = ensureNumber(overviewWritingCostRaw);
+  const advancePayment1Percent = ensureNumber(advancePayment1PercentRaw);
+  const advancePayment2Percent = ensureNumber(advancePayment2PercentRaw);
   const advancePaymentIncludeOverview = form.watch(
     "advance_payment_include_overview"
   );
@@ -188,37 +218,41 @@ export function ContractForm({
 
   // Auto-calculate translation cost
   useEffect(() => {
-    const translationCost = basePageCount * translationUnitPrice;
+    const pageCount = ensureNumber(basePageCount);
+    const unitPrice = ensureNumber(translationUnitPrice);
+    const translationCost = pageCount * unitPrice;
     form.setValue("translation_cost", translationCost);
   }, [basePageCount, translationUnitPrice, form]);
 
   // Auto-calculate total amount
   useEffect(() => {
-    const translationCost = form.getValues("translation_cost") || 0;
-    const overviewCost = overviewWritingCost || 0;
+    const translationCost = ensureNumber(form.getValues("translation_cost"));
+    const overviewCost = ensureNumber(overviewWritingCost);
     const total = translationCost + overviewCost;
     form.setValue("total_amount", total);
   }, [form.getValues("translation_cost"), overviewWritingCost, form]);
 
   // Auto-calculate management fee (5% of total)
   useEffect(() => {
-    const total = form.getValues("total_amount") || 0;
+    const total = ensureNumber(form.getValues("total_amount"));
     const managementFee = total * 0.05;
     form.setValue("management_fee", managementFee);
   }, [form.getValues("total_amount"), form]);
 
   // Auto-calculate tax (10% of (total - management fee))
   useEffect(() => {
-    const total = form.getValues("total_amount") || 0;
-    const managementFee = form.getValues("management_fee") || 0;
+    const total = ensureNumber(form.getValues("total_amount"));
+    const managementFee = ensureNumber(form.getValues("management_fee"));
     const taxAmount = (total - managementFee) * 0.1;
     form.setValue("tax_amount", taxAmount);
   }, [form.getValues("total_amount"), form.getValues("management_fee"), form]);
 
   // Auto-calculate advance payments
   useEffect(() => {
-    const translationCost = form.getValues("translation_cost") || 0;
-    const overviewCost = overviewWritingCost || 0;
+    const translationCost = ensureNumber(form.getValues("translation_cost"));
+    const overviewCost = ensureNumber(overviewWritingCost);
+    const advance1Percent = ensureNumber(advancePayment1Percent);
+    const advance2Percent = ensureNumber(advancePayment2Percent);
 
     // Calculate base for advance payments (apply same rule to both)
     const advanceBase = advancePaymentIncludeOverview
@@ -226,10 +260,10 @@ export function ContractForm({
       : translationCost;
 
     // Calculate advance payment 1
-    const advance1 = (advanceBase * advancePayment1Percent) / 100;
+    const advance1 = (advanceBase * advance1Percent) / 100;
 
     // Calculate advance payment 2
-    const advance2 = (advanceBase * advancePayment2Percent) / 100;
+    const advance2 = (advanceBase * advance2Percent) / 100;
 
     form.setValue("advance_payment_1", advance1);
     form.setValue("advance_payment_2", advance2);
@@ -244,9 +278,9 @@ export function ContractForm({
 
   // Auto-calculate final payment
   useEffect(() => {
-    const total = form.getValues("total_amount") || 0;
-    const advance1 = form.getValues("advance_payment_1") || 0;
-    const advance2 = form.getValues("advance_payment_2") || 0;
+    const total = ensureNumber(form.getValues("total_amount"));
+    const advance1 = ensureNumber(form.getValues("advance_payment_1"));
+    const advance2 = ensureNumber(form.getValues("advance_payment_2"));
     const finalPayment = total - advance1 - advance2;
     form.setValue("final_payment", finalPayment);
   }, [
@@ -299,6 +333,16 @@ export function ContractForm({
       if (work) {
         form.setValue("base_page_count", work.page_count || 0);
         // You might want to load unit price from work or contract settings
+
+        // Auto-set translation_part from work
+        if (work.translation_part_code) {
+          form.setValue("translation_part", work.translation_part_code);
+        }
+
+        // Auto-set stage from work
+        if (work.stage) {
+          form.setValue("stage", parseInt(work.stage.toString()));
+        }
 
         // Auto-select template based on translation part
         if (
@@ -401,6 +445,33 @@ export function ContractForm({
       const advance2Percent =
         advanceBase > 0 ? (advance2 / advanceBase) * 100 : 0;
 
+      // CRITICAL: Ensure all numeric values are properly converted to numbers
+      // DecimalField values from Django may come as strings like "300000.00"
+      // We must parse them correctly - "300000.00" should become 300000, NOT 30000000
+      const safeNumber = (value: any): number => {
+        if (value === null || value === undefined) return 0;
+        if (typeof value === "number") return value;
+        if (typeof value === "string") {
+          // DRF serializes DecimalField as string "300000.00"
+          // We need to parse it as a decimal number
+          // "300000.00" -> 300000.0 (correct)
+          // NOT "300000.00" -> 30000000 (wrong - removing decimal point)
+          try {
+            // Direct parse - parseFloat handles "300000.00" correctly
+            const num = parseFloat(value);
+            return isNaN(num) ? 0 : num;
+          } catch {
+            return 0;
+          }
+        }
+        // Handle other types
+        try {
+          return parseFloat(String(value));
+        } catch {
+          return 0;
+        }
+      };
+
       form.reset({
         contract_number: contract.contract_number || "",
         work: contract.work ? parseInt(contract.work.toString()) : null,
@@ -410,19 +481,31 @@ export function ContractForm({
           : null,
         start_date: contract.start_date || "",
         end_date: contract.end_date || "",
-        base_page_count: basePageCount,
-        translation_unit_price: unitPrice,
-        translation_cost: translationCost,
-        overview_writing_cost: overviewCost,
-        total_amount: totalAmount,
-        management_fee: totalAmount * 0.05,
-        tax_amount: (totalAmount - totalAmount * 0.05) * 0.1,
-        advance_payment_1_percent: advance1Percent,
-        advance_payment_1: advance1,
-        advance_payment_2_percent: advance2Percent,
-        advance_payment_2: advance2,
-        advance_payment_include_overview: advanceIncludeOverview,
-        final_payment: finalPayment,
+        base_page_count: safeNumber(contract.base_page_count) || basePageCount,
+        translation_unit_price:
+          safeNumber(contract.translation_unit_price) || unitPrice,
+        translation_cost:
+          safeNumber(contract.translation_cost) || translationCost,
+        overview_writing_cost:
+          safeNumber(contract.overview_writing_cost) || overviewCost,
+        total_amount: safeNumber(contract.total_amount) || totalAmount,
+        management_fee:
+          (safeNumber(contract.total_amount) || totalAmount) * 0.05,
+        tax_amount:
+          ((safeNumber(contract.total_amount) || totalAmount) -
+            (safeNumber(contract.total_amount) || totalAmount) * 0.05) *
+          0.1,
+        advance_payment_1_percent:
+          safeNumber(contract.advance_payment_1_percent) || advance1Percent,
+        advance_payment_1: safeNumber(contract.advance_payment_1) || advance1,
+        advance_payment_2_percent:
+          safeNumber(contract.advance_payment_2_percent) || advance2Percent,
+        advance_payment_2: safeNumber(contract.advance_payment_2) || advance2,
+        advance_payment_include_overview:
+          contract.advance_payment_include_overview !== undefined
+            ? contract.advance_payment_include_overview
+            : advanceIncludeOverview,
+        final_payment: safeNumber(contract.final_payment) || finalPayment,
         status: contract.status || "draft",
         signed_at: contract.signed_at || "",
         contract_file: contract.contract_file || undefined,
@@ -437,6 +520,12 @@ export function ContractForm({
         translator_bank_branch: contract.translator_details?.bank_branch || "",
         translator_tax_code: contract.translator_details?.tax_code || "",
       });
+
+      // Set template ID if available
+      if (contract.template_id || contract.template) {
+        setSelectedTemplateId(contract.template_id || contract.template);
+      }
+
       setWorkSelectMode("select");
     } else {
       form.reset({
@@ -572,12 +661,185 @@ export function ContractForm({
       return;
     }
 
+    // If template is selected, generate contract file from template
+    let contractFile: File | undefined = undefined;
+    if (selectedTemplateId) {
+      try {
+        const selectedTemplate = templates.find(
+          (t) => t.id === selectedTemplateId
+        );
+        if (selectedTemplate) {
+          const selectedWork = works.find((w) => w.id === data.work);
+          const selectedTranslator = translators.find(
+            (t) => t.id === data.translator
+          );
+
+          if (
+            selectedTemplate.type === "rich_text" &&
+            selectedTemplate.content
+          ) {
+            // Use edited content if available, otherwise use template content
+            const templateContent =
+              editedTemplateContent || selectedTemplate.content;
+
+            // For rich_text templates, merge content and create HTML blob
+            const mergedContent = mergeTemplateContent(
+              templateContent,
+              data,
+              selectedWork,
+              selectedTranslator
+            );
+
+            // Extract styles from template content if exists (both <style> tags and inline styles)
+            const styleMatch = mergedContent.match(
+              /<style[^>]*>([\s\S]*?)<\/style>/i
+            );
+            const extractedStyles = styleMatch ? styleMatch[1] : "";
+
+            // Check if content already has full HTML structure
+            const hasHtmlStructure =
+              mergedContent.trim().toLowerCase().startsWith("<!doctype") ||
+              mergedContent.trim().toLowerCase().startsWith("<html");
+
+            let htmlContent: string;
+
+            if (hasHtmlStructure) {
+              // Content already has full HTML structure, use as-is
+              htmlContent = mergedContent;
+            } else {
+              // Wrap content in HTML structure with proper styling
+              // Preserve all inline styles and formatting from template
+              htmlContent = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hợp đồng ${data.contract_number || ""}</title>
+  <style>
+    ${extractedStyles}
+    /* Base styles for contract document */
+    body {
+      font-family: "Times New Roman", serif;
+      font-size: 13pt;
+      line-height: 1.6;
+      margin: 0;
+      padding: 40px;
+      color: #000;
+      max-width: 210mm;
+      margin: 0 auto;
+    }
+    
+    /* Preserve all formatting from template - don't override inline styles */
+    * {
+      box-sizing: border-box;
+    }
+    
+    /* Preserve paragraph formatting */
+    p {
+      margin: 0.5em 0;
+    }
+    
+    /* Preserve table formatting */
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1em 0;
+    }
+    
+    td, th {
+      border: 1px solid #000;
+      padding: 8px;
+      text-align: left;
+    }
+    
+    /* Preserve text formatting */
+    strong {
+      font-weight: bold;
+    }
+    
+    em {
+      font-style: italic;
+    }
+    
+    u {
+      text-decoration: underline;
+    }
+    
+    /* Print styles */
+    @media print {
+      body { 
+        margin: 0;
+        padding: 20mm;
+      }
+      
+      @page {
+        size: A4;
+        margin: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  ${mergedContent}
+</body>
+</html>`;
+            }
+
+            const blob = new Blob([htmlContent], {
+              type: "text/html;charset=utf-8",
+            });
+            const fileName = `hop-dong-${data.contract_number || "new"}.html`;
+            contractFile = new File([blob], fileName, {
+              type: "text/html;charset=utf-8",
+            });
+          } else if (
+            selectedTemplate.type === "word_file" &&
+            selectedTemplate.file_url
+          ) {
+            // For word_file templates, generate from backend API
+            try {
+              const blob = await apiClient.generateContractFromTemplate(
+                selectedTemplateId,
+                data,
+                selectedWork,
+                selectedTranslator
+              );
+
+              const fileName = `hop-dong-${data.contract_number || "new"}.docx`;
+              contractFile = new File([blob], fileName, {
+                type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              });
+            } catch (generateError: any) {
+              console.warn(
+                "Backend generate not available, using template merge:",
+                generateError
+              );
+              // Fallback: if backend generate fails, we'll create without file
+              // The contract will be created but without the generated file
+            }
+          }
+        }
+      } catch (error: any) {
+        console.error("Error generating contract from template:", error);
+        toast({
+          title: "Cảnh báo",
+          description:
+            "Không thể tạo file hợp đồng từ mẫu. Hợp đồng sẽ được tạo không có file.",
+          variant: "default",
+        });
+      }
+    }
+
     await onSubmit({
       ...data,
       total_amount: data.total_amount,
       advance_payment_1: data.advance_payment_1,
       advance_payment_2: data.advance_payment_2,
       final_payment: data.final_payment,
+      contract_file: contractFile,
+      template_id: selectedTemplateId || undefined,
+      stage: data.stage || undefined,
+      translation_part: data.translation_part || undefined,
     });
   };
 
@@ -862,15 +1124,17 @@ export function ContractForm({
                   <FormItem>
                     <FormLabel>Mẫu hợp đồng (tùy chọn)</FormLabel>
                     <Select
-                      value={selectedTemplateId?.toString() || ""}
+                      value={selectedTemplateId?.toString() || "none"}
                       onValueChange={(value) => {
-                        setSelectedTemplateId(value ? parseInt(value) : null);
+                        setSelectedTemplateId(
+                          value === "none" ? null : parseInt(value)
+                        );
                       }}>
                       <SelectTrigger>
                         <SelectValue placeholder="Chọn mẫu hợp đồng" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Không sử dụng mẫu</SelectItem>
+                        <SelectItem value="none">Không sử dụng mẫu</SelectItem>
                         {templates.map((template) => (
                           <SelectItem
                             key={template.id}
@@ -892,118 +1156,44 @@ export function ContractForm({
                       control={form.control}
                       name="start_date"
                       rules={{ required: "Ngày bắt đầu là bắt buộc" }}
-                      render={({ field }) => {
-                        const displayValue = field.value
-                          ? formatDateToVietnamese(field.value)
-                          : "";
-                        return (
-                          <FormItem>
-                            <FormLabel>Ngày bắt đầu</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="text"
-                                placeholder="dd/mm/yyyy"
-                                value={displayValue}
-                                onChange={(e) => {
-                                  let value = e.target.value;
-                                  // Auto-format: add slashes
-                                  value = value.replace(/[^\d]/g, "");
-                                  if (value.length > 2) {
-                                    value =
-                                      value.slice(0, 2) + "/" + value.slice(2);
-                                  }
-                                  if (value.length > 5) {
-                                    value =
-                                      value.slice(0, 5) +
-                                      "/" +
-                                      value.slice(5, 9);
-                                  }
-
-                                  const parsed = parseVietnameseDate(value);
-                                  if (parsed) {
-                                    field.onChange(parsed);
-                                  } else if (value === "") {
-                                    field.onChange("");
-                                  }
-                                }}
-                                onBlur={(e) => {
-                                  const parsed = parseVietnameseDate(
-                                    e.target.value
-                                  );
-                                  if (parsed) {
-                                    field.onChange(parsed);
-                                  }
-                                  field.onBlur();
-                                }}
-                                maxLength={10}
-                              />
-                            </FormControl>
-                            <FormDescription className="text-xs">
-                              Định dạng: dd/mm/yyyy (ví dụ: 29/12/2025)
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        );
-                      }}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Ngày bắt đầu</FormLabel>
+                          <FormControl>
+                            <DatePicker
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder="dd/mm/yyyy"
+                            />
+                          </FormControl>
+                          <FormDescription className="text-xs">
+                            Chọn từ lịch hoặc nhập tay theo định dạng dd/mm/yyyy
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
 
                     <FormField
                       control={form.control}
                       name="end_date"
                       rules={{ required: "Ngày kết thúc là bắt buộc" }}
-                      render={({ field }) => {
-                        const displayValue = field.value
-                          ? formatDateToVietnamese(field.value)
-                          : "";
-                        return (
-                          <FormItem>
-                            <FormLabel>Ngày kết thúc</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="text"
-                                placeholder="dd/mm/yyyy"
-                                value={displayValue}
-                                onChange={(e) => {
-                                  let value = e.target.value;
-                                  // Auto-format: add slashes
-                                  value = value.replace(/[^\d]/g, "");
-                                  if (value.length > 2) {
-                                    value =
-                                      value.slice(0, 2) + "/" + value.slice(2);
-                                  }
-                                  if (value.length > 5) {
-                                    value =
-                                      value.slice(0, 5) +
-                                      "/" +
-                                      value.slice(5, 9);
-                                  }
-
-                                  const parsed = parseVietnameseDate(value);
-                                  if (parsed) {
-                                    field.onChange(parsed);
-                                  } else if (value === "") {
-                                    field.onChange("");
-                                  }
-                                }}
-                                onBlur={(e) => {
-                                  const parsed = parseVietnameseDate(
-                                    e.target.value
-                                  );
-                                  if (parsed) {
-                                    field.onChange(parsed);
-                                  }
-                                  field.onBlur();
-                                }}
-                                maxLength={10}
-                              />
-                            </FormControl>
-                            <FormDescription className="text-xs">
-                              Định dạng: dd/mm/yyyy (ví dụ: 29/12/2025)
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        );
-                      }}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Ngày kết thúc</FormLabel>
+                          <FormControl>
+                            <DatePicker
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder="dd/mm/yyyy"
+                            />
+                          </FormControl>
+                          <FormDescription className="text-xs">
+                            Chọn từ lịch hoặc nhập tay theo định dạng dd/mm/yyyy
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
                   </div>
                 </div>
@@ -1445,57 +1635,23 @@ export function ContractForm({
                   <FormField
                     control={form.control}
                     name="signed_at"
-                    render={({ field }) => {
-                      const displayValue = field.value
-                        ? formatDateToVietnamese(field.value)
-                        : "";
-                      return (
-                        <FormItem>
-                          <FormLabel>Ngày ký hợp đồng</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="text"
-                              placeholder="dd/mm/yyyy"
-                              value={displayValue}
-                              onChange={(e) => {
-                                let value = e.target.value;
-                                // Auto-format: add slashes
-                                value = value.replace(/[^\d]/g, "");
-                                if (value.length > 2) {
-                                  value =
-                                    value.slice(0, 2) + "/" + value.slice(2);
-                                }
-                                if (value.length > 5) {
-                                  value =
-                                    value.slice(0, 5) + "/" + value.slice(5, 9);
-                                }
-
-                                const parsed = parseVietnameseDate(value);
-                                if (parsed) {
-                                  field.onChange(parsed);
-                                } else if (value === "") {
-                                  field.onChange("");
-                                }
-                              }}
-                              onBlur={(e) => {
-                                const parsed = parseVietnameseDate(
-                                  e.target.value
-                                );
-                                if (parsed) {
-                                  field.onChange(parsed);
-                                }
-                                field.onBlur();
-                              }}
-                              maxLength={10}
-                            />
-                          </FormControl>
-                          <FormDescription className="text-xs">
-                            Ngày ký hợp đồng (nếu đã ký). Định dạng: dd/mm/yyyy
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      );
-                    }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Ngày ký hợp đồng</FormLabel>
+                        <FormControl>
+                          <DatePicker
+                            value={field.value || undefined}
+                            onChange={(value) => field.onChange(value || "")}
+                            placeholder="dd/mm/yyyy (tùy chọn)"
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Ngày ký hợp đồng (nếu đã ký). Chọn từ lịch hoặc nhập
+                          tay theo định dạng dd/mm/yyyy
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
 
                   <FormField
@@ -1784,13 +1940,22 @@ export function ContractForm({
       />
 
       {/* Contract Preview Modal */}
-      <ContractPreview
-        open={previewOpen}
-        onOpenChange={setPreviewOpen}
-        formData={form.getValues()}
-        work={works.find((w) => w.id === form.watch("work")!)}
-        translator={translators.find((t) => t.id === form.watch("translator")!)}
-      />
+      {selectedTemplateId && (
+        <ContractPreviewFromTemplate
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          template={templates.find((t) => t.id === selectedTemplateId) || null}
+          formData={form.getValues()}
+          work={works.find((w) => w.id === form.watch("work")!)}
+          translator={translators.find(
+            (t) => t.id === form.watch("translator")!
+          )}
+          onSave={(content) => {
+            // Save edited content to use when creating contract
+            setEditedTemplateContent(content);
+          }}
+        />
+      )}
 
       {/* Word Editor Modal */}
       <WordEditor

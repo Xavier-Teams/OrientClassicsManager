@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import TranslationWork, TranslationPart
+from .models import TranslationWork, TranslationPart, Stage
 
 
 class TranslationPartSerializer(serializers.ModelSerializer):
@@ -46,12 +46,22 @@ class TranslationPartDetailSerializer(serializers.ModelSerializer):
         return TranslationWorkSerializer(works, many=True).data
 
 
+class StageSerializer(serializers.ModelSerializer):
+    """Serializer cho Stage"""
+    class Meta:
+        model = Stage
+        fields = ['id', 'name', 'code', 'order', 'description', 'is_active']
+        read_only_fields = ['id']
+
+
 class TranslationWorkSerializer(serializers.ModelSerializer):
     progress = serializers.ReadOnlyField()
     translator_name = serializers.SerializerMethodField()
     translator_details = serializers.SerializerMethodField()
     translation_part_name = serializers.CharField(source='translation_part.name', read_only=True, allow_null=True)
     translation_part_code = serializers.CharField(source='translation_part.code', read_only=True, allow_null=True)
+    stage_name = serializers.CharField(source='stage.name', read_only=True, allow_null=True)
+    stage_code = serializers.CharField(source='stage.code', read_only=True, allow_null=True)
     
     class Meta:
         model = TranslationWork
@@ -61,6 +71,7 @@ class TranslationWorkSerializer(serializers.ModelSerializer):
             'page_count', 'word_count', 'description',
             'translation_part', 'translation_part_name', 'translation_part_code',
             'translator', 'translator_name', 'translator_details',
+            'stage', 'stage_name', 'stage_code',
             'state', 'priority', 'translation_progress', 'progress',
             'notes', 'active',
             'created_at', 'updated_at', 'created_by'

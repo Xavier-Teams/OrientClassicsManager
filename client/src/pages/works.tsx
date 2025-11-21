@@ -155,6 +155,7 @@ export default function Works() {
     { id: "author", label: "Tác giả", sortable: true },
     { id: "translator", label: "Dịch giả", sortable: true },
     { id: "translation_part", label: "Hợp phần", sortable: false },
+    { id: "stage", label: "Giai đoạn", sortable: false },
     { id: "state", label: "Trạng thái", sortable: true },
     { id: "priority", label: "Ưu tiên", sortable: true },
     { id: "progress", label: "Tiến độ", sortable: true },
@@ -226,6 +227,12 @@ export default function Works() {
     queryKey: ["translationParts"],
     queryFn: () => apiClient.getTranslationParts(),
     // Always fetch to use in filter dropdown
+  });
+
+  const { data: stages } = useQuery({
+    queryKey: ["stages"],
+    queryFn: () => apiClient.getStages(),
+    enabled: workFormOpen, // Only fetch when form is open
   });
 
   // Mutations
@@ -367,6 +374,13 @@ export default function Works() {
       apiData.translator = data.translator_id;
     } else {
       apiData.translator = null;
+    }
+
+    // Map stage_id to stage (backend expects FK, not _id)
+    if (data.stage_id != null) {
+      apiData.stage = data.stage_id;
+    } else {
+      apiData.stage = null;
     }
 
     if (selectedWork) {
@@ -1102,6 +1116,19 @@ export default function Works() {
                             <p className="text-sm text-muted-foreground">
                               {work.author || "Không rõ"}
                             </p>
+                            {(work.translation_part_name || work.stage_name) && (
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                                {work.translation_part_name && (
+                                  <span>Hợp phần: {work.translation_part_name}</span>
+                                )}
+                                {work.translation_part_name && work.stage_name && (
+                                  <span>•</span>
+                                )}
+                                {work.stage_name && (
+                                  <span>Giai đoạn: {work.stage_name}</span>
+                                )}
+                              </div>
+                            )}
                           </CardHeader>
 
                           <CardContent className="p-4 pt-0 space-y-3">
@@ -1311,6 +1338,9 @@ export default function Works() {
                       {visibleListColumns.has("translation_part") && (
                         <TableHead>Hợp phần</TableHead>
                       )}
+                      {visibleListColumns.has("stage") && (
+                        <TableHead>Giai đoạn</TableHead>
+                      )}
                       {visibleListColumns.has("state") && (
                         <TableHead>
                           <button
@@ -1428,6 +1458,15 @@ export default function Works() {
                           {visibleListColumns.has("translation_part") && (
                             <TableCell>
                               {work.translation_part_name || (
+                                <span className="text-muted-foreground text-sm">
+                                  Chưa gán
+                                </span>
+                              )}
+                            </TableCell>
+                          )}
+                          {visibleListColumns.has("stage") && (
+                            <TableCell>
+                              {work.stage_name || (
                                 <span className="text-muted-foreground text-sm">
                                   Chưa gán
                                 </span>
@@ -1713,6 +1752,16 @@ export default function Works() {
                                         </span>
                                       )}
                                     </div>
+                                    {(work.translation_part_name || work.stage_name) && (
+                                      <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+                                        {work.translation_part_name && (
+                                          <span>Hợp phần: {work.translation_part_name}</span>
+                                        )}
+                                        {work.stage_name && (
+                                          <span>Giai đoạn: {work.stage_name}</span>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <Badge
@@ -1805,6 +1854,7 @@ export default function Works() {
         work={selectedWork}
         translators={translatorsData?.results || []}
         translationParts={translationParts || []}
+        stages={stages || []}
         onSubmit={handleFormSubmit}
         isLoading={createWorkMutation.isPending || updateWorkMutation.isPending}
       />

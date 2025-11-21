@@ -5,6 +5,32 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 
+class Stage(models.Model):
+    """Giai đoạn thực hiện dịch thuật"""
+    name = models.CharField(max_length=100, unique=True, verbose_name='Tên giai đoạn')
+    code = models.CharField(max_length=20, unique=True, verbose_name='Mã giai đoạn')
+    order = models.IntegerField(unique=True, verbose_name='Thứ tự', help_text='Thứ tự sắp xếp (1, 2, 3, 4, 5...)')
+    description = models.TextField(blank=True, verbose_name='Mô tả')
+    is_active = models.BooleanField(default=True, verbose_name='Hoạt động')
+    
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Ngày tạo')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ngày cập nhật')
+    
+    class Meta:
+        db_table = 'stages'
+        verbose_name = 'Giai đoạn'
+        verbose_name_plural = 'Giai đoạn'
+        ordering = ['order']
+        indexes = [
+            models.Index(fields=['code'], name='idx_stages_code'),
+            models.Index(fields=['order'], name='idx_stages_order'),
+            models.Index(fields=['is_active'], name='idx_stages_active'),
+        ]
+    
+    def __str__(self):
+        return self.name
+
+
 class TranslationPart(models.Model):
     """Hợp phần dịch thuật"""
     name = models.CharField(max_length=200, verbose_name='Tên hợp phần')
@@ -112,7 +138,8 @@ class TranslationWork(models.Model):
         null=True,
         blank=True,
         related_name='works',
-        verbose_name='Hợp phần dịch thuật'
+        verbose_name='Hợp phần dịch thuật',
+        db_index=True
     )
     translator = models.ForeignKey(
         'translators.Translator',
@@ -120,7 +147,18 @@ class TranslationWork(models.Model):
         null=True,
         blank=True,
         related_name='translated_works',
-        verbose_name='Dịch giả'
+        verbose_name='Dịch giả',
+        db_index=True
+    )
+    stage = models.ForeignKey(
+        Stage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='works',
+        verbose_name='Giai đoạn',
+        help_text='Giai đoạn thực hiện dịch thuật',
+        db_index=True
     )
     # Keep old translator_user field for backward compatibility during migration
     translator_user = models.ForeignKey(
@@ -163,6 +201,20 @@ class TranslationWork(models.Model):
         verbose_name = 'Tác phẩm dịch thuật'
         verbose_name_plural = 'Tác phẩm dịch thuật'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['translation_part', 'stage'], name='idx_works_part_stage'),
+            models.Index(fields=['translator', 'state'], name='idx_works_trans_state'),
+            models.Index(fields=['state'], name='idx_works_state'),
+            models.Index(fields=['active'], name='idx_works_active'),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['translation_part', 'stage', 'name'],
+                name='unique_work_part_stage_name',
+                condition=models.Q(active=True),
+                violation_error_message='Đã tồn tại tác phẩm với cùng tên trong hợp phần và giai đoạn này'
+            ),
+        ]
     
     def __str__(self):
         return self.name

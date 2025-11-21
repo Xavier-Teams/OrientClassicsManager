@@ -71,12 +71,23 @@ import {
   FileType,
   Highlighter,
   MoreHorizontal,
+  FileEdit,
+  FileText as FileTextIcon,
+  BookOpen,
+  Hash,
+  Settings,
+  Columns,
+  Rows,
+  Trash2,
+  FolderOpen,
+  Clock,
 } from "lucide-react";
 import mammoth from "mammoth";
 import { apiClient, ContractTemplate } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { PlaceholderContextMenu } from "./PlaceholderContextMenu";
 import { Eye, Edit, X } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface ContractTemplateEditorProps {
   open?: boolean;
@@ -103,14 +114,18 @@ const PLACEHOLDERS = [
   { key: "{{contract_date}}", label: "Ngày hợp đồng" },
   { key: "{{work_name}}", label: "Tên tác phẩm" },
   { key: "{{translator_name}}", label: "Tên dịch giả" },
-  { key: "{{translator_id_card}}", label: "CMND/CCCD dịch giả" },
-  { key: "{{translator_address}}", label: "Địa chỉ dịch giả" },
-  { key: "{{translator_phone}}", label: "Số điện thoại dịch giả" },
-  { key: "{{translator_email}}", label: "Email dịch giả" },
-  { key: "{{translator_bank_account}}", label: "Số tài khoản ngân hàng" },
-  { key: "{{translator_bank_name}}", label: "Tên ngân hàng" },
-  { key: "{{translator_bank_branch}}", label: "Chi nhánh ngân hàng" },
-  { key: "{{translator_tax_code}}", label: "Mã số thuế" },
+  { key: "{{translator_id_card}}", label: "Số CMND/CCCD" },
+  { key: "{{translator_id_card_issue_date}}", label: "Ngày cấp CMND/CCCD" },
+  { key: "{{translator_id_card_issue_place}}", label: "Nơi cấp CMND/CCCD" },
+  { key: "{{translator_workplace}}", label: "Nơi công tác" },
+  { key: "{{translator_address}}", label: "Địa chỉ" },
+  { key: "{{translator_phone}}", label: "Điện thoại" },
+  { key: "{{translator_email}}", label: "Email" },
+  { key: "{{translator_beneficiary}}", label: "Người thụ hưởng" },
+  { key: "{{translator_bank_account}}", label: "Số tài khoản" },
+  { key: "{{translator_bank_name}}", label: "Tại ngân hàng" },
+  { key: "{{translator_bank_branch}}", label: "Chi nhánh" },
+  { key: "{{translator_tax_code}}", label: "Mã số thuế TNCN" },
   { key: "{{start_date}}", label: "Ngày bắt đầu" },
   { key: "{{end_date}}", label: "Ngày kết thúc" },
   { key: "{{base_page_count}}", label: "Số trang cơ sở" },
@@ -188,6 +203,38 @@ export function ContractTemplateEditor({
   const [wordCount, setWordCount] = useState(0);
   const [charCount, setCharCount] = useState(0);
 
+  // Page Setup
+  const [showPageSetup, setShowPageSetup] = useState(false);
+  const [pageSize, setPageSize] = useState("A4");
+  const [pageOrientation, setPageOrientation] = useState<
+    "portrait" | "landscape"
+  >("portrait");
+  const [pageMargins, setPageMargins] = useState({
+    top: "2.54cm",
+    right: "2.54cm",
+    bottom: "2.54cm",
+    left: "2.54cm",
+  });
+
+  // Footnotes
+  const footnoteCounterRef = useRef(1);
+  const [showInsertFootnote, setShowInsertFootnote] = useState(false);
+
+  // Page Numbers
+  const [showPageNumbers, setShowPageNumbers] = useState(false);
+  const [pageNumberPosition, setPageNumberPosition] = useState<
+    "header" | "footer"
+  >("footer");
+  const [pageNumberAlignment, setPageNumberAlignment] = useState<
+    "left" | "center" | "right"
+  >("center");
+
+  // Draft management
+  const [showDraftList, setShowDraftList] = useState(false);
+  const [backendEndpointAvailable, setBackendEndpointAvailable] = useState<
+    boolean | null
+  >(null);
+
   const form = useForm<TemplateFormValues>({
     defaultValues: {
       name: "",
@@ -220,15 +267,39 @@ export function ContractTemplateEditor({
       // Update editor content without resetting cursor
       if (editorRef.current && template.content) {
         isUpdatingContentRef.current = true;
-        editorRef.current.innerHTML = template.content;
-        // Initialize history with template content
-        historyRef.current = [template.content];
-        historyIndexRef.current = 0;
-        setCanUndo(false);
-        setCanRedo(false);
-        setTimeout(() => {
+        const currentContent = editorRef.current.innerHTML;
+        // Only update if content changed
+        if (currentContent !== template.content) {
+          const savedRange = saveSelection();
+          editorRef.current.innerHTML = template.content;
+          // Initialize history with template content
+          historyRef.current = [template.content];
+          historyIndexRef.current = 0;
+          setCanUndo(false);
+          setCanRedo(false);
+          setTimeout(() => {
+            isUpdatingContentRef.current = false;
+            // Try to restore cursor position
+            if (savedRange) {
+              try {
+                restoreSelection(savedRange);
+              } catch {
+                // If restore fails, place cursor at end
+                const range = document.createRange();
+                range.selectNodeContents(editorRef.current!);
+                range.collapse(false);
+                const selection = window.getSelection();
+                if (selection) {
+                  selection.removeAllRanges();
+                  selection.addRange(range);
+                }
+              }
+            }
+            editorRef.current?.focus();
+          }, 0);
+        } else {
           isUpdatingContentRef.current = false;
-        }, 0);
+        }
       }
     } else {
       form.reset({
@@ -246,6 +317,7 @@ export function ContractTemplateEditor({
       setFilePreview(null);
       if (editorRef.current) {
         isUpdatingContentRef.current = true;
+        const savedRange = saveSelection();
         editorRef.current.innerHTML = "";
         // Initialize history with empty content
         historyRef.current = [""];
@@ -254,6 +326,16 @@ export function ContractTemplateEditor({
         setCanRedo(false);
         setTimeout(() => {
           isUpdatingContentRef.current = false;
+          // Place cursor at start for new template
+          const range = document.createRange();
+          range.selectNodeContents(editorRef.current!);
+          range.collapse(true);
+          const selection = window.getSelection();
+          if (selection) {
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+          editorRef.current?.focus();
         }, 0);
       }
     }
@@ -339,11 +421,57 @@ export function ContractTemplateEditor({
       if (onSuccess) onSuccess();
     },
     onError: (error: any) => {
+      let errorMessage = "Không thể tạo mẫu hợp đồng";
+      let errorTitle = "Lỗi";
+
+      if (error?.status === 404 || error?.response?.status === 404) {
+        errorTitle = "Endpoint không tồn tại";
+        const formData = form.getValues();
+
+        // Offer to save to localStorage as fallback
+        const saveToLocalStorage = window.confirm(
+          "API endpoint `/api/v1/contract-templates/` không tồn tại trên backend.\n\n" +
+            "Bạn có muốn lưu bản nháp vào localStorage để tiếp tục chỉnh sửa sau không?\n\n" +
+            "Lưu ý: Dữ liệu sẽ chỉ được lưu cục bộ và sẽ mất nếu xóa cache trình duyệt."
+        );
+
+        if (saveToLocalStorage) {
+          const draftKey = "template-draft-new";
+          localStorage.setItem(
+            draftKey,
+            JSON.stringify({
+              ...formData,
+              is_draft: true,
+              saved_at: new Date().toISOString(),
+              _note: "Lưu tạm do backend endpoint chưa sẵn sàng",
+            })
+          );
+          setIsDraft(true);
+          toast({
+            title: "Đã lưu bản nháp",
+            description:
+              "Bản nháp đã được lưu vào localStorage. Vui lòng liên hệ admin để tạo endpoint backend.",
+            duration: 10000,
+          });
+          return; // Don't show error toast if user chose to save
+        }
+
+        errorMessage =
+          error?.message ||
+          "API endpoint `/api/v1/contract-templates/` không tồn tại trên backend.\n\nVui lòng:\n1. Kiểm tra backend Django có endpoint này chưa\n2. Kiểm tra URL routing trong backend\n3. Liên hệ admin để tạo endpoint này";
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      }
+
       toast({
-        title: "Lỗi",
-        description: error.message || "Không thể tạo mẫu hợp đồng",
+        title: errorTitle,
+        description: errorMessage,
         variant: "destructive",
+        duration: 10000, // Show longer for important errors
       });
+      console.error("Error creating contract template:", error);
     },
   });
 
@@ -368,15 +496,109 @@ export function ContractTemplateEditor({
       if (onSuccess) onSuccess();
     },
     onError: (error: any) => {
+      let errorMessage = "Không thể cập nhật mẫu hợp đồng";
+      let errorTitle = "Lỗi";
+
+      if (error?.status === 404 || error?.response?.status === 404) {
+        errorTitle = "Endpoint không tồn tại";
+        errorMessage =
+          error?.message ||
+          "API endpoint `/api/v1/contract-templates/{id}/` không tồn tại trên backend.\n\nVui lòng kiểm tra backend API.";
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      }
+
       toast({
-        title: "Lỗi",
-        description: error.message || "Không thể cập nhật mẫu hợp đồng",
+        title: errorTitle,
+        description: errorMessage,
         variant: "destructive",
+        duration: 10000, // Show longer for important errors
       });
+      console.error("Error updating contract template:", error);
     },
   });
 
+  // Check if backend endpoint is available on mount
+  useEffect(() => {
+    const checkEndpoint = async () => {
+      try {
+        // Use fetch directly to check endpoint without triggering console errors
+        const API_BASE_URL =
+          import.meta.env.VITE_API_URL || "http://localhost:8000";
+        const token =
+          localStorage.getItem("access_token") ||
+          localStorage.getItem("token") ||
+          localStorage.getItem("accessToken") ||
+          "";
+
+        const response = await fetch(
+          `${API_BASE_URL}/api/v1/contract-templates/?page_size=1`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
+            },
+            // Suppress console errors for this check
+            signal: AbortSignal.timeout(5000), // 5 second timeout
+          }
+        );
+
+        if (response.ok) {
+          setBackendEndpointAvailable(true);
+        } else if (response.status === 404) {
+          // Endpoint doesn't exist - this is expected
+          setBackendEndpointAvailable(false);
+          // Log as info instead of error
+          console.info(
+            "ℹ️ Contract templates endpoint not available. Data will be saved to localStorage."
+          );
+        } else {
+          // Other errors might be auth issues, so assume endpoint exists
+          setBackendEndpointAvailable(true);
+        }
+      } catch (error: any) {
+        // Network errors or timeout - assume endpoint exists to avoid blocking user
+        if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+          // Timeout - assume endpoint exists
+          setBackendEndpointAvailable(true);
+        } else {
+          // Other errors - assume endpoint exists
+          setBackendEndpointAvailable(true);
+        }
+      }
+    };
+
+    checkEndpoint();
+  }, []);
+
   const handleSubmit = (data: TemplateFormValues) => {
+    // If backend endpoint is not available, save to localStorage instead
+    if (backendEndpointAvailable === false) {
+      const draftKey = template
+        ? `template-draft-${template.id}`
+        : "template-draft-new";
+      localStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          ...data,
+          is_draft: true,
+          saved_at: new Date().toISOString(),
+          _note: "Lưu tạm do backend endpoint chưa sẵn sàng",
+        })
+      );
+      setIsDraft(true);
+      toast({
+        title: "Đã lưu bản nháp",
+        description:
+          "Backend endpoint chưa sẵn sàng. Bản nháp đã được lưu vào localStorage. Vui lòng liên hệ admin để tạo endpoint backend.",
+        duration: 10000,
+      });
+      return;
+    }
+
     // Clear draft when submitting
     const draftKey = template
       ? `template-draft-${template.id}`
@@ -409,6 +631,107 @@ export function ContractTemplateEditor({
       title: "Đã lưu bản nháp",
       description: "Bản nháp đã được lưu. Bạn có thể tiếp tục chỉnh sửa sau.",
     });
+  };
+
+  // Load draft function
+  const handleLoadDraft = () => {
+    const draftKey = template
+      ? `template-draft-${template.id}`
+      : "template-draft-new";
+    const draftData = localStorage.getItem(draftKey);
+
+    if (!draftData) {
+      toast({
+        title: "Không có bản nháp",
+        description: "Không tìm thấy bản nháp đã lưu.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const draft = JSON.parse(draftData);
+
+      // Confirm before loading
+      const confirmLoad = window.confirm(
+        `Bạn có muốn tải lại bản nháp đã lưu lúc ${
+          draft.saved_at
+            ? new Date(draft.saved_at).toLocaleString("vi-VN")
+            : "trước đó"
+        } không? Dữ liệu hiện tại sẽ bị thay thế.`
+      );
+
+      if (confirmLoad) {
+        form.reset(draft);
+        setIsDraft(true);
+
+        // Update editor content if rich_text
+        if (draft.type === "rich_text" && draft.content && editorRef.current) {
+          isUpdatingContentRef.current = true;
+          editorRef.current.innerHTML = draft.content;
+          // Initialize history with draft content
+          historyRef.current = [draft.content];
+          historyIndexRef.current = 0;
+          setCanUndo(false);
+          setCanRedo(false);
+
+          setTimeout(() => {
+            isUpdatingContentRef.current = false;
+            // Place cursor at end
+            const range = document.createRange();
+            range.selectNodeContents(editorRef.current!);
+            range.collapse(false);
+            const selection = window.getSelection();
+            if (selection) {
+              selection.removeAllRanges();
+              selection.addRange(range);
+            }
+            editorRef.current?.focus();
+          }, 0);
+        }
+
+        toast({
+          title: "Đã tải lại bản nháp",
+          description: "Bản nháp đã được tải lại thành công.",
+        });
+      }
+    } catch (e) {
+      console.error("Error loading draft:", e);
+      toast({
+        title: "Lỗi",
+        description: "Không thể tải lại bản nháp. Dữ liệu có thể bị hỏng.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Check if draft exists
+  const checkDraftExists = () => {
+    const draftKey = template
+      ? `template-draft-${template.id}`
+      : "template-draft-new";
+    const draftData = localStorage.getItem(draftKey);
+    return !!draftData;
+  };
+
+  // Get draft info
+  const getDraftInfo = () => {
+    const draftKey = template
+      ? `template-draft-${template.id}`
+      : "template-draft-new";
+    const draftData = localStorage.getItem(draftKey);
+
+    if (!draftData) return null;
+
+    try {
+      const draft = JSON.parse(draftData);
+      return {
+        saved_at: draft.saved_at ? new Date(draft.saved_at) : null,
+        has_content: !!(draft.content || draft.name),
+      };
+    } catch {
+      return null;
+    }
   };
 
   const insertPlaceholder = (placeholder: string) => {
@@ -452,8 +775,8 @@ export function ContractTemplateEditor({
     }
   };
 
-  // Save state to history
-  const saveToHistory = (content: string) => {
+  // Save state to history - save immediately without debounce for proper undo/redo
+  const saveToHistory = (content: string, immediate: boolean = false) => {
     if (!editorRef.current) return;
 
     // Remove future history if we're not at the end
@@ -463,6 +786,10 @@ export function ContractTemplateEditor({
         historyIndexRef.current + 1
       );
     }
+
+    // Don't save if content hasn't changed
+    const lastContent = historyRef.current[historyIndexRef.current];
+    if (lastContent === content && !immediate) return;
 
     // Add new state
     historyRef.current.push(content);
@@ -479,23 +806,43 @@ export function ContractTemplateEditor({
     setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
   };
 
-  // Undo function
+  // Undo function - restore one step at a time
   const handleUndo = () => {
     if (historyIndexRef.current > 0 && editorRef.current) {
       historyIndexRef.current--;
       const previousContent = historyRef.current[historyIndexRef.current];
+      const savedRange = saveSelection();
       isUpdatingContentRef.current = true;
       editorRef.current.innerHTML = previousContent;
       form.setValue("content", previousContent);
       setTimeout(() => {
         isUpdatingContentRef.current = false;
+        // Try to restore selection, if fails place cursor at end
+        if (savedRange) {
+          try {
+            restoreSelection(savedRange);
+          } catch {
+            // Place cursor at end if restore fails
+            const range = document.createRange();
+            range.selectNodeContents(editorRef.current!);
+            range.collapse(false);
+            const selection = window.getSelection();
+            if (selection) {
+              selection.removeAllRanges();
+              selection.addRange(range);
+            }
+          }
+        }
         setCanUndo(historyIndexRef.current > 0);
         setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+        if (editorRef.current) {
+          editorRef.current.focus();
+        }
       }, 0);
     }
   };
 
-  // Redo function
+  // Redo function - restore one step at a time
   const handleRedo = () => {
     if (
       historyIndexRef.current < historyRef.current.length - 1 &&
@@ -503,13 +850,33 @@ export function ContractTemplateEditor({
     ) {
       historyIndexRef.current++;
       const nextContent = historyRef.current[historyIndexRef.current];
+      const savedRange = saveSelection();
       isUpdatingContentRef.current = true;
       editorRef.current.innerHTML = nextContent;
       form.setValue("content", nextContent);
       setTimeout(() => {
         isUpdatingContentRef.current = false;
+        // Try to restore selection, if fails place cursor at end
+        if (savedRange && editorRef.current) {
+          try {
+            restoreSelection(savedRange);
+          } catch {
+            // Place cursor at end if restore fails
+            const range = document.createRange();
+            range.selectNodeContents(editorRef.current);
+            range.collapse(false);
+            const selection = window.getSelection();
+            if (selection) {
+              selection.removeAllRanges();
+              selection.addRange(range);
+            }
+          }
+        }
         setCanUndo(historyIndexRef.current > 0);
         setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+        if (editorRef.current) {
+          editorRef.current.focus();
+        }
       }, 0);
     }
   };
@@ -1019,6 +1386,244 @@ export function ContractTemplateEditor({
     updateWordCount();
   }, [form.watch("content")]);
 
+  // Table formatting functions
+  const formatTable = (
+    command:
+      | "addRow"
+      | "addColumn"
+      | "deleteRow"
+      | "deleteColumn"
+      | "mergeCells"
+      | "splitCells"
+  ) => {
+    if (!editorRef.current) return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      toast({
+        title: "Chưa chọn",
+        description: "Vui lòng chọn một ô trong bảng để thực hiện thao tác.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const cell =
+      range.commonAncestorContainer.nodeType === Node.TEXT_NODE
+        ? range.commonAncestorContainer.parentElement?.closest("td, th")
+        : (range.commonAncestorContainer as HTMLElement).closest("td, th");
+
+    if (!cell) {
+      toast({
+        title: "Không phải bảng",
+        description: "Vui lòng đặt con trỏ trong một ô của bảng.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const table = (cell as HTMLElement).closest("table");
+    if (!table) return;
+
+    const row = (cell as HTMLElement).closest("tr");
+    if (!row) return;
+
+    const cellIndex = Array.from(row.children).indexOf(cell as HTMLElement);
+
+    switch (command) {
+      case "addRow":
+        const newRow = row.cloneNode(true) as HTMLTableRowElement;
+        newRow.querySelectorAll("td, th").forEach((cell) => {
+          (cell as HTMLElement).textContent = "";
+        });
+        row.insertAdjacentElement("afterend", newRow);
+        break;
+      case "addColumn":
+        table.querySelectorAll("tr").forEach((tr) => {
+          const newCell = document.createElement("td");
+          newCell.innerHTML = "&nbsp;";
+          if (cellIndex < tr.children.length) {
+            tr.insertBefore(newCell, tr.children[cellIndex + 1]);
+          } else {
+            tr.appendChild(newCell);
+          }
+        });
+        break;
+      case "deleteRow":
+        if (table.querySelectorAll("tr").length > 1) {
+          row.remove();
+        } else {
+          toast({
+            title: "Không thể xóa",
+            description: "Bảng phải có ít nhất một hàng.",
+            variant: "destructive",
+          });
+          return;
+        }
+        break;
+      case "deleteColumn":
+        if (row.children.length > 1) {
+          table.querySelectorAll("tr").forEach((tr) => {
+            if (tr.children[cellIndex]) {
+              tr.removeChild(tr.children[cellIndex]);
+            }
+          });
+        } else {
+          toast({
+            title: "Không thể xóa",
+            description: "Bảng phải có ít nhất một cột.",
+            variant: "destructive",
+          });
+          return;
+        }
+        break;
+      case "mergeCells":
+        // Simple merge - merge selected cells if multiple selected
+        if (range.toString()) {
+          // If text is selected, try to merge
+          document.execCommand("mergeCells", false, undefined);
+        } else {
+          toast({
+            title: "Chọn nhiều ô",
+            description: "Vui lòng chọn nhiều ô để gộp.",
+            variant: "destructive",
+          });
+          return;
+        }
+        break;
+      case "splitCells":
+        document.execCommand("splitCells", false, undefined);
+        break;
+    }
+
+    const newContent = editorRef.current.innerHTML;
+    form.setValue("content", newContent);
+    saveToHistory(newContent);
+    editorRef.current.focus();
+  };
+
+  // Insert footnote
+  const insertFootnote = () => {
+    if (!editorRef.current) return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+    const footnoteNumber = footnoteCounterRef.current++;
+
+    // Create superscript reference
+    const superscript = document.createElement("sup");
+    superscript.textContent = footnoteNumber.toString();
+    superscript.style.verticalAlign = "super";
+    superscript.style.fontSize = "0.8em";
+
+    // Insert reference
+    range.insertNode(superscript);
+    range.setStartAfter(superscript);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    // Add footnote at the end
+    const footnoteDiv = document.createElement("div");
+    footnoteDiv.className = "footnote";
+    footnoteDiv.style.marginTop = "10px";
+    footnoteDiv.style.paddingTop = "10px";
+    footnoteDiv.style.borderTop = "1px solid #ccc";
+    footnoteDiv.innerHTML = `<sup>${footnoteNumber}</sup> <span contenteditable="true">Nhập nội dung chú thích...</span>`;
+
+    editorRef.current.appendChild(footnoteDiv);
+
+    const newContent = editorRef.current.innerHTML;
+    form.setValue("content", newContent);
+    saveToHistory(newContent);
+    editorRef.current.focus();
+  };
+
+  // Insert page number
+  const insertPageNumber = () => {
+    if (!editorRef.current) return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+
+    // Create page number placeholder
+    const pageNumberSpan = document.createElement("span");
+    pageNumberSpan.className = "page-number";
+    pageNumberSpan.contentEditable = "false";
+    pageNumberSpan.style.display = "inline-block";
+    pageNumberSpan.textContent = "[Số trang]";
+    pageNumberSpan.style.color = "#666";
+    pageNumberSpan.style.fontStyle = "italic";
+
+    range.insertNode(pageNumberSpan);
+    range.setStartAfter(pageNumberSpan);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    const newContent = editorRef.current.innerHTML;
+    form.setValue("content", newContent);
+    saveToHistory(newContent);
+    editorRef.current.focus();
+  };
+
+  // Apply page setup
+  const applyPageSetup = () => {
+    if (!editorRef.current) return;
+
+    // Apply page styles via CSS
+    const pageStyle = document.createElement("style");
+    pageStyle.id = "page-setup-style";
+
+    // Remove existing style if any
+    const existingStyle = document.getElementById("page-setup-style");
+    if (existingStyle) {
+      existingStyle.remove();
+    }
+
+    const width =
+      pageSize === "A4"
+        ? pageOrientation === "portrait"
+          ? "21cm"
+          : "29.7cm"
+        : pageOrientation === "portrait"
+        ? "21.59cm"
+        : "27.94cm"; // Letter
+    const height =
+      pageSize === "A4"
+        ? pageOrientation === "portrait"
+          ? "29.7cm"
+          : "21cm"
+        : pageOrientation === "portrait"
+        ? "27.94cm"
+        : "21.59cm"; // Letter
+
+    pageStyle.textContent = `
+      [contenteditable="true"] {
+        width: ${width};
+        min-height: ${height};
+        margin: ${pageMargins.top} ${pageMargins.right} ${pageMargins.bottom} ${pageMargins.left};
+        padding: 1cm;
+        box-sizing: border-box;
+        background: white;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      }
+    `;
+
+    document.head.appendChild(pageStyle);
+    setShowPageSetup(false);
+
+    toast({
+      title: "Đã áp dụng",
+      description: "Thiết lập trang đã được áp dụng.",
+    });
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -1186,18 +1791,67 @@ export function ContractTemplateEditor({
     };
   }, [form.watch(), template]);
 
-  // Load draft on mount
+  // Load draft on mount - ask user first
   useEffect(() => {
     if (open && !template) {
-      const draftData = localStorage.getItem("template-draft-new");
+      const draftKey = "template-draft-new";
+      const draftData = localStorage.getItem(draftKey);
       if (draftData) {
         try {
           const draft = JSON.parse(draftData);
-          form.reset(draft);
-          setIsDraft(true);
-          if (draft.type === "word_file" && draft.file) {
-            // Note: File objects can't be restored from localStorage
-            // User will need to re-upload the file
+          // Only auto-load if there's actual content
+          if (draft.name || draft.content) {
+            const draftDate = draft.saved_at
+              ? new Date(draft.saved_at).toLocaleString("vi-VN")
+              : "trước đó";
+
+            const shouldLoad = window.confirm(
+              `Bạn có bản nháp đã lưu lúc ${draftDate}.\n\nBạn có muốn tải lại bản nháp này không?`
+            );
+
+            if (shouldLoad) {
+              form.reset(draft);
+              setIsDraft(true);
+
+              // Update editor content if rich_text
+              if (
+                draft.type === "rich_text" &&
+                draft.content &&
+                editorRef.current
+              ) {
+                isUpdatingContentRef.current = true;
+                editorRef.current.innerHTML = draft.content;
+                // Initialize history with draft content
+                historyRef.current = [draft.content];
+                historyIndexRef.current = 0;
+                setCanUndo(false);
+                setCanRedo(false);
+
+                setTimeout(() => {
+                  isUpdatingContentRef.current = false;
+                  // Place cursor at end
+                  const range = document.createRange();
+                  range.selectNodeContents(editorRef.current!);
+                  range.collapse(false);
+                  const selection = window.getSelection();
+                  if (selection) {
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                  }
+                  editorRef.current?.focus();
+                }, 0);
+              }
+
+              if (draft.type === "word_file" && draft.file) {
+                // Note: File objects can't be restored from localStorage
+                // User will need to re-upload the file
+                toast({
+                  title: "Lưu ý",
+                  description:
+                    "File Word không thể khôi phục từ bản nháp. Vui lòng tải lại file.",
+                });
+              }
+            }
           }
         } catch (e) {
           console.error("Error loading draft:", e);
@@ -1243,6 +1897,22 @@ export function ContractTemplateEditor({
   return (
     <div className="min-h-screen p-6 space-y-6">
       <div className="max-w-7xl mx-auto">
+        {/* Backend Endpoint Warning */}
+        {backendEndpointAvailable === false && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertTitle>Backend endpoint chưa sẵn sàng</AlertTitle>
+            <AlertDescription>
+              API endpoint{" "}
+              <code className="bg-destructive/10 px-1 py-0.5 rounded text-xs font-mono">
+                /api/v1/contract-templates/
+              </code>{" "}
+              không tồn tại trên backend. Dữ liệu sẽ được lưu vào localStorage
+              và sẽ mất nếu xóa cache trình duyệt. Vui lòng liên hệ admin để tạo
+              endpoint backend.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
@@ -1760,6 +2430,74 @@ export function ContractTemplateEditor({
                         title="Tạo bảng tùy chỉnh">
                         <Table className="h-4 w-4" />
                       </Button>
+
+                      <div className="w-px h-6 bg-border mx-1" />
+
+                      {/* Table Formatting */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => formatTable("addRow")}
+                        title="Thêm hàng">
+                        <Rows className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => formatTable("addColumn")}
+                        title="Thêm cột">
+                        <Columns className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => formatTable("deleteRow")}
+                        title="Xóa hàng">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => formatTable("mergeCells")}
+                        title="Gộp ô">
+                        <Table className="h-4 w-4" />
+                      </Button>
+
+                      <div className="w-px h-6 bg-border mx-1" />
+
+                      {/* Footnotes */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={insertFootnote}
+                        title="Chèn chú thích">
+                        <BookOpen className="h-4 w-4" />
+                      </Button>
+
+                      {/* Page Numbers */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={insertPageNumber}
+                        title="Chèn số trang">
+                        <Hash className="h-4 w-4" />
+                      </Button>
+
+                      {/* Page Setup */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowPageSetup(true)}
+                        title="Thiết lập trang">
+                        <Settings className="h-4 w-4" />
+                      </Button>
                     </div>
 
                     {/* Row 3: Spacing Options */}
@@ -1824,34 +2562,75 @@ export function ContractTemplateEditor({
                             <div
                               ref={editorRef}
                               contentEditable
-                              suppressContentEditableWarning
                               onInput={(e) => {
                                 if (
                                   !isUpdatingContentRef.current &&
                                   editorRef.current
                                 ) {
+                                  // Get current selection before updating
+                                  const selection = window.getSelection();
+                                  const range =
+                                    selection && selection.rangeCount > 0
+                                      ? selection.getRangeAt(0).cloneRange()
+                                      : null;
+
                                   const html = editorRef.current.innerHTML;
                                   field.onChange(html);
                                   updateWordCount();
-                                  // Save to history with debounce
+
+                                  // Restore selection immediately to prevent cursor jump
+                                  if (range && selection) {
+                                    try {
+                                      selection.removeAllRanges();
+                                      selection.addRange(range);
+                                    } catch (e) {
+                                      // Ignore if range is invalid
+                                    }
+                                  }
+
+                                  // Save to history with debounce for proper undo/redo
                                   clearTimeout(autoSaveTimeoutRef.current!);
                                   autoSaveTimeoutRef.current = setTimeout(
                                     () => {
                                       if (editorRef.current) {
                                         saveToHistory(
-                                          editorRef.current.innerHTML
+                                          editorRef.current.innerHTML,
+                                          false
                                         );
                                       }
                                     },
-                                    500
+                                    300
                                   );
                                 }
                               }}
                               onBlur={() => {
-                                if (editorRef.current) {
+                                if (
+                                  editorRef.current &&
+                                  !isUpdatingContentRef.current
+                                ) {
                                   const html = editorRef.current.innerHTML;
                                   field.onChange(html);
                                   updateWordCount();
+                                  // Save final state on blur
+                                  saveToHistory(html, true);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                // Prevent cursor from jumping to start
+                                if (
+                                  e.key === "ArrowUp" ||
+                                  e.key === "ArrowDown" ||
+                                  e.key === "ArrowLeft" ||
+                                  e.key === "ArrowRight" ||
+                                  e.key === "Home" ||
+                                  e.key === "End"
+                                ) {
+                                  // Let browser handle navigation keys
+                                  return;
+                                }
+                                // Save selection before any key press
+                                if (!isUpdatingContentRef.current) {
+                                  saveSelection();
                                 }
                               }}
                               className="min-h-[400px] p-4 prose prose-sm max-w-none focus:outline-none focus:ring-2 focus:ring-primary cursor-text"
@@ -1860,11 +2639,7 @@ export function ContractTemplateEditor({
                                 fontSize: "13pt",
                                 lineHeight: "1.6",
                               }}
-                              dangerouslySetInnerHTML={
-                                isUpdatingContentRef.current
-                                  ? undefined
-                                  : { __html: field.value }
-                              }
+                              suppressContentEditableWarning
                             />
                           </PlaceholderContextMenu>
                         </FormControl>
@@ -2160,6 +2935,23 @@ export function ContractTemplateEditor({
                     <Save className="h-4 w-4 mr-2" />
                     Lưu bản nháp
                   </Button>
+                  {checkDraftExists() && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleLoadDraft}
+                      disabled={isLoading}>
+                      <FolderOpen className="h-4 w-4 mr-2" />
+                      Tải lại bản nháp
+                    </Button>
+                  )}
+                  {getDraftInfo()?.saved_at && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      Đã lưu:{" "}
+                      {getDraftInfo()?.saved_at?.toLocaleString("vi-VN")}
+                    </span>
+                  )}
                 </div>
                 {/* Word Count */}
                 <div className="text-xs text-muted-foreground flex items-center gap-2">
@@ -2189,6 +2981,134 @@ export function ContractTemplateEditor({
           </form>
         </Form>
       </div>
+
+      {/* Page Setup Dialog */}
+      <Dialog open={showPageSetup} onOpenChange={setShowPageSetup}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Thiết lập trang</DialogTitle>
+            <DialogDescription>
+              Cấu hình khổ giấy, hướng và căn lề cho tài liệu
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Khổ giấy</Label>
+              <Select value={pageSize} onValueChange={setPageSize}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="A4">A4 (21 x 29.7 cm)</SelectItem>
+                  <SelectItem value="Letter">
+                    Letter (21.59 x 27.94 cm)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Hướng trang</Label>
+              <Select
+                value={pageOrientation}
+                onValueChange={(v) =>
+                  setPageOrientation(v as "portrait" | "landscape")
+                }>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="portrait">Dọc</SelectItem>
+                  <SelectItem value="landscape">Ngang</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Căn lề (cm)</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="margin-top" className="text-xs">
+                    Trên
+                  </Label>
+                  <Input
+                    id="margin-top"
+                    type="text"
+                    value={pageMargins.top.replace("cm", "")}
+                    onChange={(e) =>
+                      setPageMargins({
+                        ...pageMargins,
+                        top: e.target.value + "cm",
+                      })
+                    }
+                    placeholder="2.54"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="margin-right" className="text-xs">
+                    Phải
+                  </Label>
+                  <Input
+                    id="margin-right"
+                    type="text"
+                    value={pageMargins.right.replace("cm", "")}
+                    onChange={(e) =>
+                      setPageMargins({
+                        ...pageMargins,
+                        right: e.target.value + "cm",
+                      })
+                    }
+                    placeholder="2.54"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="margin-bottom" className="text-xs">
+                    Dưới
+                  </Label>
+                  <Input
+                    id="margin-bottom"
+                    type="text"
+                    value={pageMargins.bottom.replace("cm", "")}
+                    onChange={(e) =>
+                      setPageMargins({
+                        ...pageMargins,
+                        bottom: e.target.value + "cm",
+                      })
+                    }
+                    placeholder="2.54"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="margin-left" className="text-xs">
+                    Trái
+                  </Label>
+                  <Input
+                    id="margin-left"
+                    type="text"
+                    value={pageMargins.left.replace("cm", "")}
+                    onChange={(e) =>
+                      setPageMargins({
+                        ...pageMargins,
+                        left: e.target.value + "cm",
+                      })
+                    }
+                    placeholder="2.54"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowPageSetup(false)}>
+              Hủy
+            </Button>
+            <Button type="button" onClick={applyPageSetup}>
+              Áp dụng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Find and Replace Dialog */}
       <Dialog open={showFindReplace} onOpenChange={setShowFindReplace}>

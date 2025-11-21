@@ -3,7 +3,8 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth, AuthContext } from "@/contexts/AuthContext";
+import { useContext } from "react";
 import { AppLayout } from "@/components/app-layout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "@/pages/login";
@@ -27,8 +28,20 @@ import { canManageUsers, canManageTranslators } from "@/lib/permissions";
 
 // Component to protect routes that require authentication
 function AuthenticatedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  // Use useContext directly to check if AuthProvider is available
+  const authContext = useContext(AuthContext);
   const [location, setLocation] = useLocation();
+
+  // If AuthProvider is not available (e.g., during hot reload), show loading
+  if (!authContext) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-muted-foreground">Đang tải...</div>
+      </div>
+    );
+  }
+
+  const { user, isLoading } = authContext;
 
   if (isLoading) {
     return (

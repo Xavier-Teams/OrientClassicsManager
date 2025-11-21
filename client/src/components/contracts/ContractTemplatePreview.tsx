@@ -2,173 +2,287 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ContractTemplate } from "@/lib/api";
+import { Download, Printer, Save, Edit, X } from "lucide-react";
+import { ContractFormValues } from "@/components/contracts/ContractForm";
+import { ContractTemplate, Work, Translator } from "@/lib/api";
 import { mergeTemplateContent } from "@/lib/contractTemplateMerge";
-import { Download } from "lucide-react";
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api";
+import { useRef, useState, useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 interface ContractTemplatePreviewProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   template: ContractTemplate | null;
+  formData: ContractFormValues;
+  work?: Work;
+  translator?: Translator;
+  onSave?: (content: string) => void;
 }
-
-// Sample data for preview
-const sampleFormData = {
-  contract_number: "HD-2024-001",
-  work: null,
-  work_name_input: "Tác phẩm mẫu",
-  translator: null,
-  start_date: new Date().toISOString().split("T")[0],
-  end_date: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-  base_page_count: 100,
-  translation_unit_price: 50000,
-  translation_cost: 5000000,
-  overview_writing_cost: 1000000,
-  total_amount: 6000000,
-  management_fee: 300000,
-  tax_amount: 570000,
-  advance_payment_1_percent: 30,
-  advance_payment_1: 1500000,
-  advance_payment_2_percent: 30,
-  advance_payment_2: 1500000,
-  advance_payment_include_overview: false,
-  final_payment: 3000000,
-  status: "draft",
-  signed_at: undefined,
-  contract_file: undefined,
-  translator_full_name: "Nguyễn Văn A",
-  translator_id_card: "001234567890",
-  translator_address: "123 Đường ABC, Quận XYZ, TP. Hà Nội",
-  translator_phone: "0123456789",
-  translator_email: "nguyenvana@example.com",
-  translator_bank_account: "1234567890",
-  translator_bank_name: "Ngân hàng ABC",
-  translator_bank_branch: "Chi nhánh Hà Nội",
-  translator_tax_code: "1234567890",
-};
-
-const sampleWork = {
-  id: 1,
-  name: "Tác phẩm mẫu",
-  title: "Tác phẩm mẫu",
-  page_count: 100,
-  word_count: 50000,
-  translation_part_code: "PHTY",
-};
-
-const sampleTranslator = {
-  id: 1,
-  full_name: "Nguyễn Văn A",
-  id_card_number: "001234567890",
-  address: "123 Đường ABC, Quận XYZ, TP. Hà Nội",
-  phone: "0123456789",
-  email: "nguyenvana@example.com",
-  bank_account_number: "1234567890",
-  bank_name: "Ngân hàng ABC",
-  bank_branch: "Chi nhánh Hà Nội",
-  tax_code: "1234567890",
-};
 
 export function ContractTemplatePreview({
   open,
   onOpenChange,
   template,
+  formData,
+  work,
+  translator,
+  onSave,
 }: ContractTemplatePreviewProps) {
-  const [isGenerating, setIsGenerating] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState<string>("");
 
-  const { data: templateContent } = useQuery<string>({
-    queryKey: ["templateContent", template?.id],
-    queryFn: async () => {
-      if (!template) return "";
-      if (template.type === "rich_text") {
-        return template.content || "";
-      } else if (template.file_url) {
-        // For Word files, we would need to fetch and convert to HTML
-        // For now, return a placeholder
-        return "<p>Preview không khả dụng cho file Word. Vui lòng tải xuống để xem.</p>";
-      }
-      return "";
-    },
-    enabled: !!template && open,
-  });
-
-  const mergedContent = template && templateContent
-    ? mergeTemplateContent(templateContent, sampleFormData as any, sampleWork as any, sampleTranslator as any)
+  // Merge template content with form data
+  const mergedContent = template
+    ? mergeTemplateContent(template.content || "", formData, work, translator)
     : "";
 
-  const handleDownload = async () => {
-    if (!template) return;
-    
-    setIsGenerating(true);
-    try {
-      if (template.type === "rich_text") {
-        // Generate Word from HTML content
-        const blob = await apiClient.generateContractFromTemplate(
-          template.id,
-          sampleFormData as any,
-          sampleWork as any,
-          sampleTranslator as any
-        );
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `Hop-dong-mau-${template.name}.docx`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      } else {
-        // Download Word template
-        if (template.file_url) {
-          window.open(template.file_url, "_blank");
-        }
+  // Initialize edited content when template changes
+  useEffect(() => {
+    if (template && mergedContent) {
+      setEditedContent(mergedContent);
+    }
+  }, [template, mergedContent]);
+
+  // Check if content has full HTML structure
+  const hasHtmlStructure =
+    editedContent.trim().toLowerCase().startsWith("<!doctype") ||
+    editedContent.trim().toLowerCase().startsWith("<html");
+
+  // Extract body content if full HTML structure
+  const getBodyContent = (html: string): string => {
+    if (hasHtmlStructure) {
+      const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+      return bodyMatch ? bodyMatch[1] : html;
+    }
+    return html;
+  };
+
+  // Get full HTML with proper structure
+  const getFullHtml = (content: string): string => {
+    if (hasHtmlStructure) {
+      return content;
+    }
+
+    // Extract styles from content if exists
+    const styleMatch = content.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+    const extractedStyles = styleMatch ? styleMatch[1] : "";
+
+    return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hợp đồng ${formData.contract_number || ""}</title>
+  <style>
+    ${extractedStyles}
+    body {
+      font-family: "Times New Roman", serif;
+      font-size: 13pt;
+      line-height: 1.6;
+      margin: 0;
+      padding: 40px;
+      color: #000;
+      max-width: 210mm;
+      margin: 0 auto;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    p {
+      margin: 0.5em 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1em 0;
+    }
+    td, th {
+      border: 1px solid #000;
+      padding: 8px;
+      text-align: left;
+    }
+    strong {
+      font-weight: bold;
+    }
+    em {
+      font-style: italic;
+    }
+    u {
+      text-decoration: underline;
+    }
+    @media print {
+      body {
+        margin: 0;
+        padding: 20mm;
       }
-    } catch (error: any) {
-      console.error("Error generating contract:", error);
-    } finally {
-      setIsGenerating(false);
+      @page {
+        size: A4;
+        margin: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  ${content}
+</body>
+</html>`;
+  };
+
+  const handlePrint = () => {
+    if (printRef.current) {
+      const printWindow = window.open("", "_blank");
+      if (printWindow) {
+        const fullHtml = getFullHtml(editedContent);
+        printWindow.document.write(fullHtml);
+        printWindow.document.close();
+        printWindow.onload = () => {
+          printWindow.print();
+        };
+      }
     }
   };
 
-  if (!template) return null;
+  const handleDownloadHTML = () => {
+    const fullHtml = getFullHtml(editedContent);
+    const blob = new Blob([fullHtml], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Hop-dong-${formData.contract_number || "new"}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({
+      title: "Thành công",
+      description: "Đã tải xuống file HTML",
+    });
+  };
+
+  const handleSave = () => {
+    if (editorRef.current) {
+      const content = editorRef.current.innerHTML;
+      setEditedContent(content);
+      setIsEditing(false);
+      if (onSave) {
+        onSave(content);
+      }
+      toast({
+        title: "Thành công",
+        description: "Đã lưu chỉnh sửa",
+      });
+    }
+  };
+
+  const handleCancelEdit = () => {
+    // Reset to original merged content
+    setEditedContent(mergedContent);
+    setIsEditing(false);
+    if (editorRef.current) {
+      editorRef.current.innerHTML = mergedContent;
+    }
+  };
+
+  // Update editor content when switching to edit mode
+  useEffect(() => {
+    if (isEditing && editorRef.current) {
+      editorRef.current.innerHTML = editedContent;
+      editorRef.current.focus();
+    }
+  }, [isEditing]);
+
+  if (!template) {
+    return null;
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Xem trước mẫu hợp đồng: {template.name}</DialogTitle>
+          <DialogTitle>
+            Xem trước hợp đồng - {template.name}
+          </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={handleDownload} disabled={isGenerating} variant="outline">
-              <Download className="h-4 w-4 mr-2" />
-              {isGenerating ? "Đang tạo..." : "Tải xuống với dữ liệu mẫu"}
-            </Button>
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {/* Toolbar */}
+          <div className="flex gap-2 mb-4 flex-wrap border-b pb-4">
+            {!isEditing ? (
+              <>
+                <Button onClick={handlePrint} variant="outline" size="sm">
+                  <Printer className="h-4 w-4 mr-2" />
+                  In hợp đồng
+                </Button>
+                <Button onClick={handleDownloadHTML} variant="outline" size="sm">
+                  <Download className="h-4 w-4 mr-2" />
+                  Tải xuống HTML
+                </Button>
+                <Button
+                  onClick={() => setIsEditing(true)}
+                  variant="outline"
+                  size="sm"
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Chỉnh sửa
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button onClick={handleSave} variant="default" size="sm">
+                  <Save className="h-4 w-4 mr-2" />
+                  Lưu chỉnh sửa
+                </Button>
+                <Button
+                  onClick={handleCancelEdit}
+                  variant="outline"
+                  size="sm"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Hủy
+                </Button>
+              </>
+            )}
           </div>
 
-          {template.type === "rich_text" ? (
-            <div
-              className="prose prose-sm max-w-none p-4 border rounded-lg"
-              dangerouslySetInnerHTML={{ __html: mergedContent }}
-              style={{
-                fontFamily: "Times New Roman, serif",
-                fontSize: "13pt",
-                lineHeight: "1.6",
-              }}
-            />
-          ) : (
-            <div className="p-4 border rounded-lg text-center text-muted-foreground">
-              <p>Preview không khả dụng cho file Word.</p>
-              <p className="text-sm mt-2">Vui lòng tải xuống để xem template với dữ liệu mẫu.</p>
-            </div>
-          )}
+          {/* Content Area */}
+          <div className="flex-1 overflow-auto border rounded-md">
+            {isEditing ? (
+              <div
+                ref={editorRef}
+                contentEditable
+                suppressContentEditableWarning
+                className="min-h-full p-8 focus:outline-none focus:ring-2 focus:ring-primary"
+                style={{
+                  fontFamily: '"Times New Roman", serif',
+                  fontSize: "13pt",
+                  lineHeight: 1.6,
+                  color: "#000",
+                }}
+                onInput={(e) => {
+                  if (editorRef.current) {
+                    setEditedContent(editorRef.current.innerHTML);
+                  }
+                }}
+              />
+            ) : (
+              <div
+                ref={printRef}
+                className="contract-preview p-8"
+                dangerouslySetInnerHTML={{ __html: editedContent }}
+                style={{
+                  fontFamily: '"Times New Roman", serif',
+                  fontSize: "13pt",
+                  lineHeight: 1.6,
+                  color: "#000",
+                }}
+              />
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
-

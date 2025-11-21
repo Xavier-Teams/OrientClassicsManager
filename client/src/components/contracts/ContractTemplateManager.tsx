@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -21,6 +22,8 @@ import {
   Loader2,
   MoreVertical,
   Eye,
+  Search,
+  X,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -49,13 +52,17 @@ export function ContractTemplateManager() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState<ContractTemplate | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<ContractTemplate | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const { data: templatesData, isLoading } = useQuery<{
+  const { data: templatesData, isLoading, error } = useQuery<{
     count: number;
+    next: string | null;
+    previous: string | null;
     results: ContractTemplate[];
   }>({
     queryKey: ["contractTemplates"],
     queryFn: () => apiClient.getContractTemplates({ page_size: 1000 }),
+    retry: 2,
   });
 
   const deleteMutation = useMutation({
@@ -81,6 +88,18 @@ export function ContractTemplateManager() {
   });
 
   const templates = templatesData?.results || [];
+  
+  // Filter templates by search query
+  const filteredTemplates = templates.filter((template) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      template.name.toLowerCase().includes(query) ||
+      template.description?.toLowerCase().includes(query) ||
+      template.translation_part?.toLowerCase().includes(query) ||
+      template.file_name?.toLowerCase().includes(query)
+    );
+  });
 
   const handleCreate = () => {
     setLocation("/contracts/templates/editor");
@@ -118,91 +137,178 @@ export function ContractTemplateManager() {
         </Button>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      {/* Search Bar */}
+      {templates.length > 0 && (
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Tìm kiếm mẫu hợp đồng..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-9"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0"
+                onClick={() => setSearchQuery("")}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-4" />
+          <p className="text-muted-foreground">Đang tải danh sách mẫu hợp đồng...</p>
+        </div>
+      ) : error ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-destructive mb-2">
+              Không thể tải danh sách mẫu hợp đồng
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {(error as any)?.message || "Đã xảy ra lỗi khi kết nối với server"}
+            </p>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["contractTemplates"] })}
+            >
+              Thử lại
+            </Button>
+          </CardContent>
+        </Card>
       ) : templates.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">
-              Chưa có mẫu hợp đồng nào. Hãy tạo mẫu hợp đồng đầu tiên.
+            <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <p className="text-lg font-medium mb-2">Chưa có mẫu hợp đồng nào</p>
+            <p className="text-muted-foreground mb-4">
+              Hãy tạo mẫu hợp đồng đầu tiên để sử dụng khi tạo hợp đồng mới
             </p>
+            <Button onClick={handleCreate} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Tạo mẫu hợp đồng đầu tiên
+            </Button>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {templates.map((template) => (
-            <Card key={template.id} className="hover-elevate">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg">{template.name}</CardTitle>
-                    {template.description && (
-                      <CardDescription className="mt-1">
-                        {template.description}
-                      </CardDescription>
-                    )}
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setPreviewTemplate(template)}>
-                        <Eye className="h-4 w-4 mr-2" />
-                        Xem trước
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleEdit(template)}>
-                        <Edit className="h-4 w-4 mr-2" />
-                        Chỉnh sửa
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleDelete(template)}
-                        className="text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Xóa
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline">
-                    {template.type === "rich_text" ? (
-                      <>
-                        <FileText className="h-3 w-3 mr-1" />
-                        Soạn thảo trực tuyến
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-3 w-3 mr-1" />
-                        File Word
-                      </>
-                    )}
-                  </Badge>
-                  {template.is_default && (
-                    <Badge variant="default">Mặc định</Badge>
-                  )}
-                  {template.translation_part && (
-                    <Badge variant="secondary">
-                      {template.translation_part}
-                    </Badge>
-                  )}
-                </div>
-                {template.file_name && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    File: {template.file_name}
-                  </p>
-                )}
+        <>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-muted-foreground">
+              {searchQuery ? (
+                <>
+                  Tìm thấy {filteredTemplates.length} / {templatesData?.count || templates.length} mẫu hợp đồng
+                </>
+              ) : (
+                <>
+                  Tổng cộng {templatesData?.count || templates.length} mẫu hợp đồng
+                </>
+              )}
+            </p>
+          </div>
+          {filteredTemplates.length === 0 && searchQuery ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <p className="text-muted-foreground">
+                  Không tìm thấy mẫu hợp đồng nào phù hợp với "{searchQuery}"
+                </p>
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => setSearchQuery("")}
+                >
+                  Xóa bộ lọc
+                </Button>
               </CardContent>
             </Card>
-          ))}
-        </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {filteredTemplates.map((template) => (
+              <Card key={template.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-lg line-clamp-2">{template.name}</CardTitle>
+                      {template.description && (
+                        <CardDescription className="mt-1 line-clamp-2">
+                          {template.description}
+                        </CardDescription>
+                      )}
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="shrink-0">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setPreviewTemplate(template)}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          Xem trước
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEdit(template)}>
+                          <Edit className="h-4 w-4 mr-2" />
+                          Chỉnh sửa
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleDelete(template)}
+                          className="text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Xóa
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    <Badge variant="outline" className="gap-1">
+                      {template.type === "rich_text" ? (
+                        <>
+                          <FileText className="h-3 w-3" />
+                          Soạn thảo trực tuyến
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-3 w-3" />
+                          File Word
+                        </>
+                      )}
+                    </Badge>
+                    {template.is_default && (
+                      <Badge variant="default">Mặc định</Badge>
+                    )}
+                    {template.translation_part && (
+                      <Badge variant="secondary">
+                        {template.translation_part}
+                      </Badge>
+                    )}
+                  </div>
+                  {template.file_name && (
+                    <p className="text-xs text-muted-foreground truncate" title={template.file_name}>
+                      📄 {template.file_name}
+                    </p>
+                  )}
+                  {template.created_at && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Tạo: {new Date(template.created_at).toLocaleDateString("vi-VN")}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {/* Template Preview Dialog */}

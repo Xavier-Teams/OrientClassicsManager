@@ -1,6 +1,15 @@
 // Use Django REST Framework instead of FastAPI
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+export interface Stage {
+  id: number;
+  name: string;
+  code: string;
+  order: number;
+  description?: string;
+  is_active: boolean;
+}
+
 export interface Work {
   id: number; // Django returns integer ID
   name: string;
@@ -17,6 +26,9 @@ export interface Work {
   translator?: string;
   translator_name?: string;
   translator_details?: Translator | null; // Chi tiết dịch giả để hiển thị trong modal
+  stage?: number;
+  stage_name?: string;
+  stage_code?: string;
   state: string; // Django uses 'state' instead of 'translation_status'
   priority: string;
   translation_progress: number;
@@ -74,9 +86,9 @@ class ApiClient {
     return token;
   }
 
-  private async request<T>(
+  private   async request<T>(
     endpoint: string,
-    options?: RequestInit
+    options?: RequestInit & { suppress404Log?: boolean }
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const token = this.getAuthToken();
@@ -138,8 +150,35 @@ class ApiClient {
 
       // Try to get error details from response
       let errorMessage = `API error: ${response.statusText}`;
+      let errorData: any = null;
+      
       try {
-        const errorData = await response.json();
+        const text = await response.text();
+        if (text) {
+          // Check if it's HTML (Django 404 page)
+          if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+            // Extract meaningful info from Django 404 page
+            if (response.status === 404) {
+              const urlMatch = text.match(/Request URL:.*?<td>(.*?)<\/td>/);
+              const url = urlMatch ? urlMatch[1] : endpoint;
+              errorMessage = `Endpoint không tồn tại: ${url}\n\nVui lòng kiểm tra backend API. Endpoint này có thể chưa được tạo hoặc đường dẫn không đúng.`;
+            } else {
+              errorMessage = `Lỗi ${response.status}: ${response.statusText}`;
+            }
+          } else {
+            try {
+              errorData = JSON.parse(text);
+            } catch {
+              // If it's not JSON and not HTML, use the text as error message
+              errorMessage = text.substring(0, 200) || errorMessage;
+            }
+          }
+        }
+      } catch (e) {
+        // If can't parse error, use status text
+      }
+      
+      if (errorData) {
         if (errorData.detail) {
           errorMessage = errorData.detail;
         } else if (errorData.message) {
@@ -151,10 +190,24 @@ class ApiClient {
             .join('; ');
           errorMessage = errors || errorMessage;
         }
-      } catch (e) {
-        // If can't parse error, use status text
       }
-      throw new Error(errorMessage);
+      
+      // Add status code to error for better debugging
+      const error = new Error(errorMessage) as any;
+      error.status = response.status;
+      error.response = { status: response.status, data: errorData };
+      
+      // Suppress console error for 404 if suppress404Log is true
+      if (response.status === 404 && options?.suppress404Log) {
+        // Don't log to console, just throw silently
+      } else {
+        // Log error for debugging (but not for suppressed 404s)
+        if (response.status !== 404) {
+          console.error(`API Error [${response.status}]:`, endpoint, errorMessage);
+        }
+      }
+      
+      throw error;
     }
 
     return response.json();
@@ -460,6 +513,15 @@ class ApiClient {
     return response.results || [];
   }
 
+  // Stages API
+  async getStages(): Promise<Stage[]> {
+    const response = await this.request<{
+      count: number;
+      results: Stage[];
+    }>("/api/v1/works/stages/");
+    return response.results || [];
+  }
+
   // Work Actions API
   async approveWork(id: number | string): Promise<Work> {
     return this.request<Work>(`/api/v1/works/${id}/approve/`, {
@@ -484,6 +546,8 @@ class ApiClient {
     search?: string;
     status?: string;
     work_id?: number;
+    translation_part?: string;
+    stage?: number;
   }): Promise<{ count: number; next: string | null; previous: string | null; results: Contract[] }> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append("page", params.page.toString());
@@ -491,11 +555,21 @@ class ApiClient {
     if (params?.search) queryParams.append("search", params.search);
     if (params?.status) queryParams.append("status", params.status);
     if (params?.work_id) queryParams.append("work_id", params.work_id.toString());
+    if (params?.translation_part) queryParams.append("translation_part", params.translation_part);
+    if (params?.stage) queryParams.append("stage", params.stage.toString());
 
     const queryString = queryParams.toString();
     return this.request<{ count: number; next: string | null; previous: string | null; results: Contract[] }>(
       `/api/v1/contracts/${queryString ? `?${queryString}` : ""}`
     );
+  }
+  
+  async getContractStatistics(): Promise<ContractStatistics> {
+    return this.request<ContractStatistics>("/api/v1/contracts/statistics/");
+  }
+  
+  async getContractProgressReport(): Promise<ContractProgressReport> {
+    return this.request<ContractProgressReport>("/api/v1/contracts/progress_report/");
   }
 
   async getContract(id: number | string): Promise<Contract> {
@@ -506,14 +580,23 @@ class ApiClient {
     contract_number: string;
     work: number;
     translator: number;
+    template?: number;
     start_date: string;
     end_date: string;
+    base_page_count?: number;
+    translation_unit_price?: number;
+    translation_cost?: number;
+    overview_writing_cost?: number;
     total_amount: string | number;
+    advance_payment_1_percent?: number;
+    advance_payment_2_percent?: number;
+    advance_payment_include_overview?: boolean;
     advance_payment_1?: string | number;
     advance_payment_2?: string | number;
-    advance_payment_include_overview?: boolean;
     final_payment?: string | number;
     status?: string;
+    stage?: number;
+    translation_part?: string;
     signed_at?: string;
     contract_file?: File;
   }): Promise<Contract> {
@@ -610,8 +693,9 @@ class ApiClient {
     if (params?.translation_part) queryParams.append("translation_part", params.translation_part);
 
     const queryString = queryParams.toString();
+    const url = `/api/v1/contract-templates/${queryString ? `?${queryString}` : ""}`;
     return this.request<{ count: number; next: string | null; previous: string | null; results: ContractTemplate[] }>(
-      `/api/v1/contract-templates/${queryString ? `?${queryString}` : ""}`
+      url
     );
   }
 
@@ -763,19 +847,71 @@ export interface Contract {
   translator: number;
   translator_name?: string;
   translator_details?: Translator | null;
+  template?: number; // Template ID
+  template_id?: number; // Template ID (read-only)
+  template_name?: string; // Template name (read-only)
   start_date: string;
   end_date: string;
+  base_page_count?: number;
+  translation_unit_price?: number;
+  translation_cost?: number;
+  overview_writing_cost?: number;
   total_amount: number;
+  advance_payment_1_percent?: number;
+  advance_payment_2_percent?: number;
+  advance_payment_include_overview?: boolean;
   advance_payment_1: number;
   advance_payment_2: number;
-  advance_payment_include_overview?: boolean;
   final_payment: number;
   status: string;
+  stage?: number; // Giai đoạn (1-5)
+  translation_part?: string; // Hợp phần
   contract_file?: string;
   signed_at?: string;
   created_at: string;
   updated_at: string;
   created_by?: number;
+}
+
+export interface ContractStatistics {
+  by_part: Array<{
+    translation_part: string;
+    stage_1: number;
+    stage_2: number;
+    stage_3: number;
+    stage_4: number;
+    stage_5: number;
+    total: number;
+  }>;
+  total: {
+    stage_1: number;
+    stage_2: number;
+    stage_3: number;
+    stage_4: number;
+    stage_5: number;
+    total: number;
+  };
+  total_contracts: number;
+}
+
+export interface ContractProgressReport {
+  progress_by_part: Array<{
+    translation_part: string;
+    translation_part_code: string;
+    draft: number;
+    pending: number;
+    signed: number;
+    active: number;
+    completed: number;
+    cancelled: number;
+    total: number;
+  }>;
+  summary: {
+    total_contracts: number;
+    signed_contracts: number;
+    active_contracts: number;
+    completed_contracts: number;
+  };
 }
 
 export interface ContractTemplate {
