@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, MoreVertical, Settings2 } from "lucide-react";
+import { Plus, MoreVertical, Settings2, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import WorkTaskForm from "./WorkTaskForm";
 
 interface BoardViewProps {
   tasks: WorkTask[];
@@ -31,6 +32,9 @@ export default function BoardView({ tasks, isLoading, onTaskUpdate }: BoardViewP
   const [newGroupColor, setNewGroupColor] = useState("#6366f1");
   const [draggedTask, setDraggedTask] = useState<WorkTask | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<number | string | null>(null);
+  const [formDialogOpen, setFormDialogOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<WorkTask | null>(null);
+  const [selectedGroupForNewTask, setSelectedGroupForNewTask] = useState<CustomGroup | string | null>(null);
 
   // Fetch custom groups
   const { data: customGroupsData, isLoading: isLoadingGroups } = useQuery({
@@ -255,7 +259,11 @@ export default function BoardView({ tasks, isLoading, onTaskUpdate }: BoardViewP
             </DialogContent>
           </Dialog>
         </div>
-        <Button>
+        <Button onClick={() => {
+          setSelectedTask(null);
+          setSelectedGroupForNewTask(null);
+          setFormDialogOpen(true);
+        }}>
           <Plus className="h-4 w-4 mr-2" />
           Thêm công việc
         </Button>
@@ -305,13 +313,26 @@ export default function BoardView({ tasks, isLoading, onTaskUpdate }: BoardViewP
                       onDragStart={(e) => handleDragStart(e, task)}
                       onDragEnd={handleDragEnd}
                       className={cn(
-                        "cursor-move hover:shadow-md transition-shadow",
+                        "cursor-move hover:shadow-md transition-shadow group",
                         draggedTask?.id === task.id && "opacity-50"
                       )}
                     >
                       <CardContent className="p-4">
                         <div className="space-y-2">
-                          <div className="font-medium">{task.title}</div>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="font-medium flex-1">{task.title}</div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+                              onClick={() => {
+                                setSelectedTask(task);
+                                setFormDialogOpen(true);
+                              }}
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </Button>
+                          </div>
                           {task.due_date && (
                             <div className="text-sm text-muted-foreground">
                               Hạn: {formatDate(task.due_date)}
@@ -353,7 +374,9 @@ export default function BoardView({ tasks, isLoading, onTaskUpdate }: BoardViewP
                     variant="ghost"
                     className="w-full justify-start"
                     onClick={() => {
-                      // Handle add task to group
+                      setSelectedTask(null);
+                      setSelectedGroupForNewTask(group);
+                      setFormDialogOpen(true);
                     }}
                   >
                     <Plus className="h-4 w-4 mr-2" />
@@ -440,7 +463,9 @@ export default function BoardView({ tasks, isLoading, onTaskUpdate }: BoardViewP
                   variant="ghost"
                   className="w-full justify-start"
                   onClick={() => {
-                    // Handle add task
+                    setSelectedTask(null);
+                    setSelectedGroupForNewTask(status);
+                    setFormDialogOpen(true);
                   }}
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -463,6 +488,29 @@ export default function BoardView({ tasks, isLoading, onTaskUpdate }: BoardViewP
           </Button>
         </div>
       </div>
+
+      <WorkTaskForm
+        task={selectedTask}
+        open={formDialogOpen}
+        onOpenChange={(open) => {
+          setFormDialogOpen(open);
+          if (!open) {
+            setSelectedTask(null);
+            setSelectedGroupForNewTask(null);
+          }
+        }}
+        onSuccess={() => {
+          setSelectedTask(null);
+          setSelectedGroupForNewTask(null);
+        }}
+        defaultStatus={
+          selectedTask
+            ? undefined
+            : typeof selectedGroupForNewTask === "string"
+            ? selectedGroupForNewTask
+            : selectedGroupForNewTask?.status_mapping?.[0] || undefined
+        }
+      />
     </div>
   );
 }

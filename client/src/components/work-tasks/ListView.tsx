@@ -1,14 +1,18 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Plus, Settings2, Eye, EyeOff } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Plus, Settings2, Eye, EyeOff, Edit2, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiClient, WorkTask } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import WorkTaskForm from "./WorkTaskForm";
 
 interface ListViewProps {
   tasks: WorkTask[];
@@ -18,16 +22,45 @@ interface ListViewProps {
 
 
 export default function ListView({ tasks, isLoading, onTaskUpdate }: ListViewProps) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [formDialogOpen, setFormDialogOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<WorkTask | null>(null);
+  
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
-    new Set(["name", "status", "assignee", "due_date", "priority"])
+    new Set([
+      "name",
+      "work_group",
+      "frequency",
+      "priority",
+      "assignee",
+      "status",
+      "start_date",
+      "due_date",
+      "completed_date",
+      "progress",
+      "created_by",
+      "created_at",
+    ])
   );
   const [columnOrder] = useState<string[]>([
     "name",
-    "status",
-    "assignee",
-    "due_date",
+    "work_group",
+    "frequency",
     "priority",
+    "assignee",
+    "status",
+    "start_date",
+    "due_date",
+    "completed_date",
     "progress",
+    "created_by",
+    "created_at",
+    "updated_at",
+    "description",
+    "notes",
   ]);
 
   // Fetch custom fields
@@ -56,9 +89,46 @@ export default function ListView({ tasks, isLoading, onTaskUpdate }: ListViewPro
     });
   };
 
+  const updateTaskMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<WorkTask> }) =>
+      apiClient.updateWorkTask(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["work-tasks"] });
+      toast({
+        title: "Thành công",
+        description: "Đã cập nhật công việc",
+      });
+      setEditingTaskId(null);
+      setIsAddingNew(false);
+    },
+  });
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return "-";
     return new Date(dateString).toLocaleDateString("vi-VN");
+  };
+
+  const formatDateForInput = (dateString?: string) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    return date.toISOString().split("T")[0];
+  };
+
+  const handleEditClick = (task: WorkTask) => {
+    setSelectedTask(task);
+    setFormDialogOpen(true);
+  };
+
+  const handleAddClick = () => {
+    setSelectedTask(null);
+    setFormDialogOpen(true);
+  };
+
+  const handleInlineEdit = (task: WorkTask, field: string, value: any) => {
+    updateTaskMutation.mutate({
+      id: task.id,
+      data: { [field]: value },
+    });
   };
 
   const STATUS_COLORS: Record<string, string> = {
@@ -98,34 +168,111 @@ export default function ListView({ tasks, isLoading, onTaskUpdate }: ListViewPro
   };
 
   const getColumnLabel = (columnId: string): string => {
-    if (columnId === "name") return "Tên công việc";
-    if (columnId === "status") return "Trạng thái";
-    if (columnId === "assignee") return "Người được giao";
-    if (columnId === "due_date") return "Hạn hoàn thành";
-    if (columnId === "priority") return "Ưu tiên";
-    if (columnId === "progress") return "Tiến độ";
+    const labels: Record<string, string> = {
+      name: "Tên công việc",
+      work_group: "Nhóm công việc",
+      frequency: "Tần suất",
+      priority: "Ưu tiên",
+      assignee: "Người được giao",
+      status: "Trạng thái",
+      start_date: "Ngày bắt đầu",
+      due_date: "Hạn hoàn thành",
+      completed_date: "Ngày hoàn thành",
+      progress: "Tiến độ",
+      created_by: "Người tạo",
+      created_at: "Ngày tạo",
+      updated_at: "Ngày cập nhật",
+      description: "Mô tả",
+      notes: "Ghi chú",
+    };
     if (columnId.startsWith("custom_")) {
       const fieldId = parseInt(columnId.replace("custom_", ""));
       const field = customFields.find((f) => f.id === fieldId);
       return field?.name || columnId;
     }
-    return columnId;
+    return labels[columnId] || columnId;
   };
 
-  const renderCellContent = (task: WorkTask, columnId: string) => {
+  const WORK_GROUP_LABELS: Record<string, string> = {
+    chung: "Công việc chung",
+    bien_tap: "Biên tập",
+    thiet_ke_cntt: "Thiết kế + CNTT",
+    quet_trung_lap: "Quét trùng lặp",
+    hanh_chinh: "Hành chính",
+    tham_dinh_ban_dich_thu: "Thẩm định bản dịch thử",
+    tham_dinh_cap_cg: "Thẩm định cấp CG",
+    nghiem_thu_cap_da: "Nghiệm thu cấp DA",
+    hop_thuong_truc: "Họp thường trực",
+  };
+
+  const FREQUENCY_LABELS: Record<string, string> = {
+    hang_ngay: "Hằng ngày",
+    hang_tuan: "Hằng tuần",
+    hang_thang: "Hằng tháng",
+    dot_xuat: "Đột xuất",
+  };
+
+  const renderCellContent = (task: WorkTask, columnId: string, isEditing: boolean = false) => {
+    const isEditingThisCell = isEditing && editingTaskId === task.id;
     if (columnId === "name") {
+      if (isEditingThisCell) {
+        return (
+          <Input
+            value={task.title}
+            onChange={(e) => handleInlineEdit(task, "title", e.target.value)}
+            className="h-8 text-sm"
+            onBlur={() => setEditingTaskId(null)}
+            autoFocus
+          />
+        );
+      }
       return (
-        <div className="font-medium max-w-xs">
+        <div className="font-medium max-w-xs group relative">
           <div className="truncate" title={task.title}>
             {task.title}
           </div>
+          <button
+            onClick={() => setEditingTaskId(task.id)}
+            className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 p-1"
+          >
+            <Edit2 className="h-3 w-3 text-muted-foreground" />
+          </button>
         </div>
       );
     }
-    if (columnId === "status") {
+    if (columnId === "work_group") {
+      if (isEditingThisCell) {
+        return (
+          <Select
+            value={task.work_group}
+            onValueChange={(value) => handleInlineEdit(task, "work_group", value)}
+          >
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(WORK_GROUP_LABELS).map(([key, label]) => (
+                <SelectItem key={key} value={key}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      }
       return (
-        <Badge className={cn(STATUS_COLORS[task.status] || "")}>
-          {STATUS_LABELS[task.status] || task.status}
+        <Badge variant="outline" className="cursor-pointer" onClick={() => setEditingTaskId(task.id)}>
+          {WORK_GROUP_LABELS[task.work_group] || task.work_group}
+        </Badge>
+      );
+    }
+    if (columnId === "frequency") {
+      return <span className="text-sm">{FREQUENCY_LABELS[task.frequency] || task.frequency}</span>;
+    }
+    if (columnId === "priority") {
+      return (
+        <Badge className={cn(PRIORITY_COLORS[task.priority] || "")}>
+          {PRIORITY_LABELS[task.priority] || task.priority}
         </Badge>
       );
     }
@@ -136,15 +283,75 @@ export default function ListView({ tasks, isLoading, onTaskUpdate }: ListViewPro
         </div>
       );
     }
-    if (columnId === "due_date") {
-      return formatDate(task.due_date);
-    }
-    if (columnId === "priority") {
+    if (columnId === "status") {
+      if (isEditingThisCell) {
+        return (
+          <Select
+            value={task.status}
+            onValueChange={(value) => handleInlineEdit(task, "status", value)}
+          >
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(STATUS_LABELS).map(([key, label]) => (
+                <SelectItem key={key} value={key}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      }
       return (
-        <Badge className={cn(PRIORITY_COLORS[task.priority] || "")}>
-          {PRIORITY_LABELS[task.priority] || task.priority}
+        <Badge
+          className={cn(STATUS_COLORS[task.status] || "", "cursor-pointer")}
+          onClick={() => setEditingTaskId(task.id)}
+        >
+          {STATUS_LABELS[task.status] || task.status}
         </Badge>
       );
+    }
+    if (columnId === "start_date") {
+      return <span className="text-sm">{formatDate(task.start_date) || "-"}</span>;
+    }
+    if (columnId === "due_date") {
+      if (isEditingThisCell) {
+        return (
+          <Input
+            type="date"
+            value={formatDateForInput(task.due_date)}
+            onChange={(e) => handleInlineEdit(task, "due_date", e.target.value || null)}
+            className="h-8 text-sm"
+            onBlur={() => setEditingTaskId(null)}
+          />
+        );
+      }
+      const daysUntilDue = task.due_date
+        ? Math.ceil(
+            (new Date(task.due_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+          )
+        : null;
+      const isOverdue = daysUntilDue !== null && daysUntilDue < 0 && task.status !== "hoan_thanh";
+      
+      return (
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setEditingTaskId(task.id)}>
+          <span className="text-sm">{formatDate(task.due_date) || "-"}</span>
+          {daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 7 && task.status !== "hoan_thanh" && (
+            <Badge variant="outline" className="text-orange-600 text-xs">
+              {daysUntilDue}d
+            </Badge>
+          )}
+          {isOverdue && (
+            <Badge variant="destructive" className="text-xs">
+              Quá hạn
+            </Badge>
+          )}
+        </div>
+      );
+    }
+    if (columnId === "completed_date") {
+      return <span className="text-sm">{formatDate(task.completed_date) || "-"}</span>;
     }
     if (columnId === "progress") {
       return (
@@ -163,6 +370,33 @@ export default function ListView({ tasks, isLoading, onTaskUpdate }: ListViewPro
             />
           </div>
           <span className="text-sm font-medium w-10">{task.progress_percent}%</span>
+        </div>
+      );
+    }
+    if (columnId === "created_by") {
+      return <span className="text-sm">{task.created_by_name || "-"}</span>;
+    }
+    if (columnId === "created_at") {
+      return <span className="text-sm">{formatDate(task.created_at) || "-"}</span>;
+    }
+    if (columnId === "updated_at") {
+      return <span className="text-sm">{formatDate(task.updated_at) || "-"}</span>;
+    }
+    if (columnId === "description") {
+      return (
+        <div className="max-w-xs">
+          <div className="truncate text-sm" title={task.description || ""}>
+            {task.description || "-"}
+          </div>
+        </div>
+      );
+    }
+    if (columnId === "notes") {
+      return (
+        <div className="max-w-xs">
+          <div className="truncate text-sm" title={task.notes || ""}>
+            {task.notes || "-"}
+          </div>
         </div>
       );
     }
@@ -244,7 +478,7 @@ export default function ListView({ tasks, isLoading, onTaskUpdate }: ListViewPro
             </DialogContent>
           </Dialog>
         </div>
-        <Button>
+        <Button onClick={handleAddClick}>
           <Plus className="h-4 w-4 mr-2" />
           Thêm công việc
         </Button>
@@ -262,32 +496,56 @@ export default function ListView({ tasks, isLoading, onTaskUpdate }: ListViewPro
                       {getColumnLabel(columnId)}
                     </TableHead>
                   ))}
+                <TableHead className="w-12">Thao tác</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tasks.length === 0 ? (
+              {tasks.length === 0 && !isAddingNew ? (
                 <TableRow>
                   <TableCell colSpan={allColumns.filter((col) => visibleColumns.has(col)).length} className="text-center py-8 text-muted-foreground">
                     Không có công việc nào
                   </TableCell>
                 </TableRow>
               ) : (
-                tasks.map((task) => (
-                  <TableRow key={task.id}>
-                    {allColumns
-                      .filter((col) => visibleColumns.has(col))
-                      .map((columnId) => (
-                        <TableCell key={columnId}>
-                          {renderCellContent(task, columnId)}
-                        </TableCell>
-                      ))}
-                  </TableRow>
-                ))
+                <>
+                  {tasks.map((task) => (
+                    <TableRow key={task.id} className={editingTaskId === task.id ? "bg-muted/50" : ""}>
+                      {allColumns
+                        .filter((col) => visibleColumns.has(col))
+                        .map((columnId) => (
+                          <TableCell key={columnId}>
+                            {renderCellContent(task, columnId, true)}
+                          </TableCell>
+                        ))}
+                      <TableCell className="w-12">
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditClick(task)}
+                            className="h-6 w-6 p-0"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </>
               )}
             </TableBody>
           </Table>
         </div>
       </div>
+
+      <WorkTaskForm
+        task={selectedTask}
+        open={formDialogOpen}
+        onOpenChange={setFormDialogOpen}
+        onSuccess={() => {
+          setSelectedTask(null);
+        }}
+      />
     </div>
   );
 }

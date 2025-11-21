@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Plus, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { WorkTask } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, isSameDay, addMonths, subMonths } from "date-fns";
+import WorkTaskForm from "./WorkTaskForm";
 
 interface CalendarViewProps {
   tasks: WorkTask[];
@@ -16,6 +17,8 @@ interface CalendarViewProps {
 export default function CalendarView({ tasks, isLoading }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [formDialogOpen, setFormDialogOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<WorkTask | null>(null);
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
@@ -99,13 +102,24 @@ export default function CalendarView({ tasks, isLoading }: CalendarViewProps) {
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setCurrentDate(new Date())}
-        >
-          Hôm nay
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentDate(new Date())}
+          >
+            Hôm nay
+          </Button>
+          <Button
+            onClick={() => {
+              setSelectedTask(null);
+              setFormDialogOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Thêm công việc
+          </Button>
+        </div>
       </div>
 
       {/* Calendar Grid */}
@@ -198,9 +212,22 @@ export default function CalendarView({ tasks, isLoading }: CalendarViewProps) {
             ) : (
               <div className="space-y-2">
                 {selectedDateTasks.map((task) => (
-                  <Card key={task.id} className="p-3">
+                  <Card key={task.id} className="p-3 group">
                     <div className="space-y-2">
-                      <div className="font-medium">{task.title}</div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="font-medium flex-1">{task.title}</div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+                          onClick={() => {
+                            setSelectedTask(task);
+                            setFormDialogOpen(true);
+                          }}
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </Button>
+                      </div>
                       {task.description && (
                         <p className="text-sm text-muted-foreground line-clamp-2">
                           {task.description}
@@ -250,6 +277,20 @@ export default function CalendarView({ tasks, isLoading }: CalendarViewProps) {
           </CardContent>
         </Card>
       )}
+
+      <WorkTaskForm
+        task={selectedTask}
+        open={formDialogOpen}
+        onOpenChange={(open) => {
+          setFormDialogOpen(open);
+          if (!open) {
+            setSelectedTask(null);
+          }
+        }}
+        onSuccess={() => {
+          setSelectedTask(null);
+        }}
+      />
     </div>
   );
 }
