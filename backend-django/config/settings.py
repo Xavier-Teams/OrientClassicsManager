@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'administration',
     'documents',
     'ai',
+    'payments',
 ]
 
 MIDDLEWARE = [

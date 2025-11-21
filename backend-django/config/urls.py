@@ -26,6 +26,7 @@ def api_root(request):
             'administration': '/api/v1/administration/',
             'documents': '/api/v1/documents/',
             'ai': '/api/v1/ai/',
+            'payments': '/api/v1/payments/',
             'admin': '/admin/',
         },
         'documentation': 'API documentation coming soon. Use /api/v1/works/board/ to test.'
@@ -45,6 +46,7 @@ urlpatterns = [
     path('api/v1/administration/', include('administration.urls')),
     path('api/v1/documents/', include('documents.urls')),
     path('api/v1/ai/', include('ai.urls')),
+    path('api/v1/payments/', include('payments.urls')),
 ]
 
 # Serve media files in development

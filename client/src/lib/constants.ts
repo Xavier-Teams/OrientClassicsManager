@@ -53,10 +53,19 @@ export const CONTRACT_STATUS_LABELS: Record<string, string> = {
 };
 
 export const PAYMENT_STATUS_LABELS: Record<string, string> = {
-  pending: "Chờ thanh toán",
-  processing: "Đang xử lý",
+  pending: "Chờ phê duyệt",
+  approved: "Đã phê duyệt",
+  rejected: "Đã từ chối",
   paid: "Đã thanh toán",
-  rejected: "Từ chối",
+  cancelled: "Đã hủy",
+};
+
+export const PAYMENT_WORK_GROUP_LABELS: Record<string, string> = {
+  dich_thuat: "Dịch thuật",
+  bien_tap: "Biên tập",
+  cntt: "CNTT",
+  hanh_chinh: "Hành chính",
+  khac: "Khác",
 };
 
 export const PAYMENT_TYPE_LABELS: Record<string, string> = {

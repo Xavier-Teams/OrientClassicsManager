@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import TranslationWork, TranslationPart, Stage
+from .models import TranslationWork, TranslationPart, Stage, WorkTask
 
 
 class TranslationPartSerializer(serializers.ModelSerializer):
@@ -165,3 +165,25 @@ class TranslationWorkSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'non_field_errors': [str(e)]})
         
         return instance
+
+
+class WorkTaskSerializer(serializers.ModelSerializer):
+    """Serializer cho WorkTask"""
+    assigned_to_name = serializers.CharField(source='assigned_to.full_name', read_only=True, allow_null=True)
+    created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, allow_null=True)
+    is_overdue = serializers.ReadOnlyField()
+    is_on_time = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = WorkTask
+        fields = [
+            'id', 'title', 'description',
+            'work_group', 'frequency', 'priority',
+            'assigned_to', 'assigned_to_name',
+            'created_by', 'created_by_name',
+            'status', 'start_date', 'due_date', 'completed_date',
+            'progress_percent', 'notes', 'is_active',
+            'is_overdue', 'is_on_time',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'is_overdue', 'is_on_time']

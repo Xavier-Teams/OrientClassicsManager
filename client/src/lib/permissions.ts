@@ -276,3 +276,23 @@ export function canManageTranslators(user: User | null): boolean {
   return allowedRoles.includes(user.role);
 }
 
+/**
+ * Check if user can access work reports
+ * Allowed: Admin, Chủ nhiệm, Trưởng ban Thư ký, Kế toán, Thư ký hợp phần, Biên tập viên, Văn phòng
+ */
+export function canAccessWorkReports(user: User | null): boolean {
+  if (!user) return false;
+  if (user.is_superuser) return true;
+  
+  const allowedRoles: UserRole[] = [
+    'chu_nhiem',
+    'truong_ban_thu_ky',
+    'ke_toan',
+    'thu_ky_hop_phan',
+    'bien_tap_vien',
+    'van_phong',
+  ];
+  
+  return allowedRoles.includes(user.role);
+}
+

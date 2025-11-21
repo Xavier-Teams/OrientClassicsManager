@@ -24,7 +24,11 @@ import MyProfile from "@/pages/my-profile";
 import AIAssistant from "@/pages/ai-assistant";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
-import { canManageUsers, canManageTranslators } from "@/lib/permissions";
+import WorkReports from "@/pages/work-reports";
+import WorkReportsPersonal from "@/pages/work-reports-personal";
+import WorkPlan from "@/pages/work-plan";
+import WorkTasks from "@/pages/work-tasks";
+import { canManageUsers, canManageTranslators, canAccessWorkReports } from "@/lib/permissions";
 
 // Component to protect routes that require authentication
 function AuthenticatedRoute({ children }: { children: React.ReactNode }) {
@@ -97,6 +101,16 @@ function Router() {
                 </Route>
                 <Route path="/ai-assistant" component={AIAssistant} />
                 <Route path="/settings" component={Settings} />
+                <Route path="/work-reports">
+                  {() => (
+                    <ProtectedRoute requiredPermission={canAccessWorkReports} fallbackPath="/">
+                      <WorkReports />
+                    </ProtectedRoute>
+                  )}
+                </Route>
+                <Route path="/work-reports/personal" component={WorkReportsPersonal} />
+                <Route path="/work-plan" component={WorkPlan} />
+                <Route path="/work-tasks" component={WorkTasks} />
                 <Route component={NotFound} />
               </Switch>
             </AppLayout>

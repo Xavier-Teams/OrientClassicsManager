@@ -2,16 +2,20 @@ from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.db.models import Count, Q, Avg
+from rest_framework.views import APIView
+from django.db.models import Count, Q, Avg, Sum, Case, When, IntegerField
 from django.db import models
-from .models import TranslationWork, TranslationPart, Stage
+from django.utils import timezone
+from datetime import datetime, timedelta
+from .models import TranslationWork, TranslationPart, Stage, WorkTask
 from .serializers import (
     TranslationWorkSerializer,
     TranslationPartSerializer,
     TranslationPartDetailSerializer,
-    StageSerializer
+    StageSerializer,
+    WorkTaskSerializer
 )
-from .permissions import WorkPermission
+from .permissions import WorkPermission, WorkReportPermission
 
 
 class TranslationPartViewSet(viewsets.ModelViewSet):
@@ -225,3 +229,309 @@ class StageViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ['order', 'name']
     ordering = ['order']
+
+
+class WorkTaskViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for WorkTask management
+    """
+    queryset = WorkTask.objects.filter(is_active=True)
+    serializer_class = WorkTaskSerializer
+    permission_classes = [AllowAny]  # TODO: Change to [IsAuthenticated] in production
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['title', 'description']
+    ordering_fields = ['created_at', 'due_date', 'priority']
+    ordering = ['-created_at']
+    
+    def perform_create(self, serializer):
+        """Set created_by when creating a task"""
+        if self.request.user and self.request.user.is_authenticated:
+            serializer.save(created_by=self.request.user)
+        else:
+            serializer.save()
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filter by work_group
+        work_group = self.request.query_params.get('work_group', None)
+        if work_group:
+            queryset = queryset.filter(work_group=work_group)
+        
+        # Filter by status
+        status = self.request.query_params.get('status', None)
+        if status:
+            queryset = queryset.filter(status=status)
+        
+        # Filter by assigned_to
+        assigned_to = self.request.query_params.get('assigned_to', None)
+        if assigned_to:
+            queryset = queryset.filter(assigned_to_id=assigned_to)
+        
+        # Filter by frequency
+        frequency = self.request.query_params.get('frequency', None)
+        if frequency:
+            queryset = queryset.filter(frequency=frequency)
+        
+        # Filter by priority
+        priority = self.request.query_params.get('priority', None)
+        if priority:
+            queryset = queryset.filter(priority=priority)
+        
+        return queryset
+
+
+class WorkTaskStatisticsView(APIView):
+    """
+    API endpoint for work task statistics
+    Requires WorkReportPermission - only specific roles can access general reports
+    """
+    permission_classes = [WorkReportPermission]
+    
+    def get(self, request):
+        """Get comprehensive statistics for work tasks"""
+        # Get month filter (default to current month)
+        month = request.query_params.get('month', None)
+        year = request.query_params.get('year', None)
+        
+        if month and year:
+            try:
+                month_int = int(month)
+                year_int = int(year)
+                start_date = timezone.datetime(year_int, month_int, 1).date()
+                if month_int == 12:
+                    end_date = timezone.datetime(year_int + 1, 1, 1).date()
+                else:
+                    end_date = timezone.datetime(year_int, month_int + 1, 1).date()
+            except (ValueError, TypeError):
+                month = None
+                year = None
+        
+        if not month or not year:
+            now = timezone.now()
+            start_date = timezone.datetime(now.year, now.month, 1).date()
+            if now.month == 12:
+                end_date = timezone.datetime(now.year + 1, 1, 1).date()
+            else:
+                end_date = timezone.datetime(now.year, now.month + 1, 1).date()
+        
+        # Filter tasks for the month
+        tasks = WorkTask.objects.filter(
+            is_active=True,
+            created_at__date__gte=start_date,
+            created_at__date__lt=end_date
+        )
+        
+        # Statistics by status
+        status_stats = tasks.values('status').annotate(count=Count('id'))
+        
+        # Statistics by work group
+        group_stats = tasks.values('work_group').annotate(count=Count('id'))
+        
+        # Statistics by frequency
+        frequency_stats = tasks.values('frequency').annotate(count=Count('id'))
+        
+        # Statistics by priority
+        priority_stats = tasks.values('priority').annotate(count=Count('id'))
+        
+        # Completed vs Not completed vs In progress
+        completed = tasks.filter(status='hoan_thanh').count()
+        not_completed = tasks.filter(status='khong_hoan_thanh').count()
+        in_progress = tasks.filter(status='dang_tien_hanh').count()
+        
+        # Tasks by status breakdown
+        status_breakdown = {
+            'hoan_thanh': tasks.filter(status='hoan_thanh').count(),
+            'khong_hoan_thanh': tasks.filter(status='khong_hoan_thanh').count(),
+            'dang_tien_hanh': tasks.filter(status='dang_tien_hanh').count(),
+            'cham_tien_do': tasks.filter(status='cham_tien_do').count(),
+            'hoan_thanh_truoc_han': tasks.filter(status='hoan_thanh_truoc_han').count(),
+            'da_huy': tasks.filter(status='da_huy').count(),
+            'tam_hoan': tasks.filter(status='tam_hoan').count(),
+            'chua_bat_dau': tasks.filter(status='chua_bat_dau').count(),
+        }
+        
+        # Tasks by work group breakdown
+        group_breakdown = {}
+        for group_code, group_name in WorkTask.WORK_GROUP_CHOICES:
+            group_breakdown[group_code] = {
+                'name': group_name,
+                'total': tasks.filter(work_group=group_code).count(),
+                'completed': tasks.filter(work_group=group_code, status='hoan_thanh').count(),
+                'in_progress': tasks.filter(work_group=group_code, status='dang_tien_hanh').count(),
+                'behind_schedule': tasks.filter(work_group=group_code, status='cham_tien_do').count(),
+            }
+        
+        # Tasks by frequency breakdown
+        frequency_breakdown = {}
+        for freq_code, freq_name in WorkTask.FREQUENCY_CHOICES:
+            frequency_breakdown[freq_code] = {
+                'name': freq_name,
+                'count': tasks.filter(frequency=freq_code).count(),
+            }
+        
+        # Incomplete tasks by group
+        incomplete_by_group = {}
+        for group_code, group_name in WorkTask.WORK_GROUP_CHOICES:
+            incomplete_by_group[group_code] = {
+                'name': group_name,
+                'count': tasks.filter(work_group=group_code).exclude(status='hoan_thanh').count(),
+            }
+        
+        # Tasks behind schedule by group
+        behind_schedule_by_group = {}
+        for group_code, group_name in WorkTask.WORK_GROUP_CHOICES:
+            behind_schedule_by_group[group_code] = {
+                'name': group_name,
+                'count': tasks.filter(work_group=group_code, status='cham_tien_do').count(),
+            }
+        
+        # High priority tasks
+        high_priority_tasks = tasks.filter(priority__in=['cao', 'rat_cao']).values('work_group').annotate(
+            in_progress=Count('id', filter=Q(status='dang_tien_hanh')),
+            completed=Count('id', filter=Q(status='hoan_thanh')),
+            not_completed=Count('id', filter=Q(status='khong_hoan_thanh')),
+        )
+        
+        # Completed tasks behind schedule
+        completed_behind_schedule = tasks.filter(
+            status='hoan_thanh',
+            completed_date__gt=models.F('due_date')
+        ).count()
+        
+        # Progress by work group
+        progress_by_group = {}
+        for group_code, group_name in WorkTask.WORK_GROUP_CHOICES:
+            group_tasks = tasks.filter(work_group=group_code)
+            total = group_tasks.count()
+            if total > 0:
+                in_progress_count = group_tasks.filter(status='dang_tien_hanh').count()
+                behind_schedule_count = group_tasks.filter(status='cham_tien_do').count()
+                progress_by_group[group_code] = {
+                    'name': group_name,
+                    'in_progress': in_progress_count,
+                    'behind_schedule': behind_schedule_count,
+                    'ratio': round((behind_schedule_count / total * 100) if total > 0 else 0, 2),
+                }
+        
+        return Response({
+            'month': month or timezone.now().month,
+            'year': year or timezone.now().year,
+            'total_tasks': tasks.count(),
+            'by_status': list(status_stats),
+            'by_group': list(group_stats),
+            'by_frequency': list(frequency_stats),
+            'by_priority': list(priority_stats),
+            'summary': {
+                'completed': completed,
+                'not_completed': not_completed,
+                'in_progress': in_progress,
+            },
+            'status_breakdown': status_breakdown,
+            'group_breakdown': group_breakdown,
+            'frequency_breakdown': frequency_breakdown,
+            'incomplete_by_group': incomplete_by_group,
+            'behind_schedule_by_group': behind_schedule_by_group,
+            'high_priority_tasks': list(high_priority_tasks),
+            'completed_behind_schedule': completed_behind_schedule,
+            'progress_by_group': progress_by_group,
+        })
+
+
+class WorkTaskPersonalStatisticsView(APIView):
+    """
+    API endpoint for personal work task statistics
+    All authenticated users can access their own statistics
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, user_id=None):
+        """Get personal statistics for a specific user"""
+        # Use user_id from URL or current user
+        if user_id:
+            target_user_id = user_id
+        elif request.user and request.user.is_authenticated:
+            target_user_id = request.user.id
+        else:
+            return Response({'error': 'User ID required'}, status=400)
+        
+        # Get month filter (default to current month)
+        month = request.query_params.get('month', None)
+        year = request.query_params.get('year', None)
+        
+        if month and year:
+            try:
+                month_int = int(month)
+                year_int = int(year)
+                start_date = timezone.datetime(year_int, month_int, 1).date()
+                if month_int == 12:
+                    end_date = timezone.datetime(year_int + 1, 1, 1).date()
+                else:
+                    end_date = timezone.datetime(year_int, month_int + 1, 1).date()
+            except (ValueError, TypeError):
+                month = None
+                year = None
+        
+        if not month or not year:
+            now = timezone.now()
+            start_date = timezone.datetime(now.year, now.month, 1).date()
+            if now.month == 12:
+                end_date = timezone.datetime(now.year + 1, 1, 1).date()
+            else:
+                end_date = timezone.datetime(now.year, now.month + 1, 1).date()
+        
+        # Filter tasks assigned to user for the month
+        tasks = WorkTask.objects.filter(
+            is_active=True,
+            assigned_to_id=target_user_id,
+            created_at__date__gte=start_date,
+            created_at__date__lt=end_date
+        )
+        
+        # Statistics similar to general statistics but filtered by user
+        status_stats = tasks.values('status').annotate(count=Count('id'))
+        group_stats = tasks.values('work_group').annotate(count=Count('id'))
+        frequency_stats = tasks.values('frequency').annotate(count=Count('id'))
+        
+        completed = tasks.filter(status='hoan_thanh').count()
+        not_completed = tasks.filter(status='khong_hoan_thanh').count()
+        in_progress = tasks.filter(status='dang_tien_hanh').count()
+        
+        status_breakdown = {
+            'hoan_thanh': tasks.filter(status='hoan_thanh').count(),
+            'khong_hoan_thanh': tasks.filter(status='khong_hoan_thanh').count(),
+            'dang_tien_hanh': tasks.filter(status='dang_tien_hanh').count(),
+            'cham_tien_do': tasks.filter(status='cham_tien_do').count(),
+            'hoan_thanh_truoc_han': tasks.filter(status='hoan_thanh_truoc_han').count(),
+            'da_huy': tasks.filter(status='da_huy').count(),
+            'tam_hoan': tasks.filter(status='tam_hoan').count(),
+            'chua_bat_dau': tasks.filter(status='chua_bat_dau').count(),
+        }
+        
+        group_breakdown = {}
+        for group_code, group_name in WorkTask.WORK_GROUP_CHOICES:
+            group_tasks = tasks.filter(work_group=group_code)
+            group_breakdown[group_code] = {
+                'name': group_name,
+                'total': group_tasks.count(),
+                'completed': group_tasks.filter(status='hoan_thanh').count(),
+                'in_progress': group_tasks.filter(status='dang_tien_hanh').count(),
+                'behind_schedule': group_tasks.filter(status='cham_tien_do').count(),
+            }
+        
+        return Response({
+            'user_id': target_user_id,
+            'month': month or timezone.now().month,
+            'year': year or timezone.now().year,
+            'total_tasks': tasks.count(),
+            'by_status': list(status_stats),
+            'by_group': list(group_stats),
+            'by_frequency': list(frequency_stats),
+            'summary': {
+                'completed': completed,
+                'not_completed': not_completed,
+                'in_progress': in_progress,
+            },
+            'status_breakdown': status_breakdown,
+            'group_breakdown': group_breakdown,
+        })

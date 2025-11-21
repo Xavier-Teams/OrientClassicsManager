@@ -95,3 +95,44 @@ class WorkPermission(permissions.BasePermission):
         
         return False
 
+
+class WorkReportPermission(permissions.BasePermission):
+    """
+    Permission class for Work Report access
+    
+    Allowed roles:
+    - Admin (is_superuser)
+    - Chủ nhiệm Dự án (chu_nhiem)
+    - Chánh văn phòng (van_phong)
+    - Trưởng ban Thư ký (truong_ban_thu_ky)
+    - Phụ trách kế toán (ke_toan)
+    - Trưởng nhóm Thư ký hợp phần (thu_ky_hop_phan)
+    - Phụ trách Biên tập (bien_tap_vien)
+    - Users with custom permission (to be implemented)
+    """
+    
+    ALLOWED_ROLES = [
+        'chu_nhiem',
+        'truong_ban_thu_ky',
+        'ke_toan',
+        'thu_ky_hop_phan',
+        'bien_tap_vien',
+        'van_phong',  # Chánh văn phòng
+    ]
+    
+    def has_permission(self, request, view):
+        """Check if user has permission to access work reports"""
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        # Superuser has all permissions
+        if request.user.is_superuser:
+            return True
+        
+        # Check if user has allowed role
+        return request.user.role in self.ALLOWED_ROLES
+    
+    def has_object_permission(self, request, view, obj):
+        """Check if user has permission for specific object"""
+        # For now, same as has_permission
+        return self.has_permission(request, view)

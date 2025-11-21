@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django_fsm import FSMField, transition
 from django.contrib.auth import get_user_model
 
@@ -255,3 +256,148 @@ class TranslationWork(models.Model):
             'cancelled': 0,
         }
         return progress_map.get(self.state, 0)
+
+
+class WorkTask(models.Model):
+    """Công việc quản lý dự án (khác với TranslationWork)"""
+    
+    WORK_GROUP_CHOICES = [
+        ('chung', 'Công việc chung'),
+        ('bien_tap', 'Biên tập'),
+        ('thiet_ke_cntt', 'Thiết kế + CNTT'),
+        ('quet_trung_lap', 'Quét trùng lặp'),
+        ('hanh_chinh', 'Hành chính'),
+        ('tham_dinh_ban_dich_thu', 'Thẩm định bản dịch thử'),
+        ('tham_dinh_cap_cg', 'Thẩm định cấp CG'),
+        ('nghiem_thu_cap_da', 'Nghiệm thu cấp DA'),
+        ('hop_thuong_truc', 'Họp thường trực'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('chua_bat_dau', 'Chưa bắt đầu'),
+        ('dang_tien_hanh', 'Đang tiến hành'),
+        ('hoan_thanh', 'Hoàn thành'),
+        ('khong_hoan_thanh', 'Không hoàn thành'),
+        ('cham_tien_do', 'Chậm tiến độ'),
+        ('hoan_thanh_truoc_han', 'Hoàn thành trước hạn'),
+        ('da_huy', 'Đã hủy'),
+        ('tam_hoan', 'Tạm hoãn'),
+    ]
+    
+    FREQUENCY_CHOICES = [
+        ('hang_ngay', 'Hằng ngày'),
+        ('hang_tuan', 'Hằng tuần'),
+        ('hang_thang', 'Hằng tháng'),
+        ('dot_xuat', 'Đột xuất'),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('thap', 'Thấp'),
+        ('trung_binh', 'Trung bình'),
+        ('cao', 'Cao'),
+        ('rat_cao', 'Rất cao'),
+    ]
+    
+    # Basic info
+    title = models.CharField(max_length=500, verbose_name='Tiêu đề công việc')
+    description = models.TextField(blank=True, verbose_name='Mô tả')
+    
+    # Classification
+    work_group = models.CharField(
+        max_length=50,
+        choices=WORK_GROUP_CHOICES,
+        default='chung',
+        verbose_name='Nhóm công việc',
+        db_index=True
+    )
+    frequency = models.CharField(
+        max_length=20,
+        choices=FREQUENCY_CHOICES,
+        default='dot_xuat',
+        verbose_name='Tần suất',
+        db_index=True
+    )
+    priority = models.CharField(
+        max_length=20,
+        choices=PRIORITY_CHOICES,
+        default='trung_binh',
+        verbose_name='Ưu tiên',
+        db_index=True
+    )
+    
+    # Assignment
+    assigned_to = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_tasks',
+        verbose_name='Người được giao',
+        db_index=True
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_tasks',
+        verbose_name='Người tạo'
+    )
+    
+    # Status and dates
+    status = models.CharField(
+        max_length=30,
+        choices=STATUS_CHOICES,
+        default='chua_bat_dau',
+        verbose_name='Trạng thái',
+        db_index=True
+    )
+    start_date = models.DateField(null=True, blank=True, verbose_name='Ngày bắt đầu')
+    due_date = models.DateField(null=True, blank=True, verbose_name='Hạn hoàn thành', db_index=True)
+    completed_date = models.DateField(null=True, blank=True, verbose_name='Ngày hoàn thành')
+    
+    # Progress
+    progress_percent = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        verbose_name='Tiến độ (%)'
+    )
+    
+    # Additional info
+    notes = models.TextField(blank=True, verbose_name='Ghi chú')
+    is_active = models.BooleanField(default=True, verbose_name='Hoạt động')
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Ngày tạo')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ngày cập nhật')
+    
+    class Meta:
+        db_table = 'work_tasks'
+        verbose_name = 'Công việc'
+        verbose_name_plural = 'Công việc'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['work_group', 'status'], name='idx_tasks_group_status'),
+            models.Index(fields=['assigned_to', 'status'], name='idx_tasks_user_status'),
+            models.Index(fields=['status'], name='idx_tasks_status'),
+            models.Index(fields=['due_date'], name='idx_tasks_due_date'),
+            models.Index(fields=['is_active'], name='idx_tasks_active'),
+        ]
+    
+    def __str__(self):
+        return self.title
+    
+    @property
+    def is_overdue(self):
+        """Kiểm tra công việc có quá hạn không"""
+        if self.due_date and self.status not in ['hoan_thanh', 'da_huy']:
+            from django.utils import timezone
+            return timezone.now().date() > self.due_date
+        return False
+    
+    @property
+    def is_on_time(self):
+        """Kiểm tra công việc có đúng tiến độ không"""
+        if self.due_date and self.status == 'hoan_thanh' and self.completed_date:
+            return self.completed_date <= self.due_date
+        return False

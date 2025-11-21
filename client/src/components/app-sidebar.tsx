@@ -10,7 +10,10 @@ import {
   Users,
   Bot,
   Shield,
-  Languages
+  Languages,
+  BarChart3,
+  Calendar,
+  ListChecks
 } from "lucide-react";
 import {
   Sidebar,
@@ -27,15 +30,36 @@ import {
 import { Link, useLocation } from "wouter";
 import { APP_NAME_SHORT } from "@/lib/constants";
 import { useAuth } from "@/contexts/AuthContext";
-import { canManageUsers, canManageTranslators } from "@/lib/permissions";
+import { canManageUsers, canManageTranslators, canAccessWorkReports } from "@/lib/permissions";
 
-const menuItems = [
+const mainMenuItems = [
   {
     title: "Tổng quan",
     url: "/",
     icon: LayoutDashboard,
     testId: "nav-dashboard",
   },
+  {
+    title: "Thanh toán",
+    url: "/payments",
+    icon: CreditCard,
+    testId: "nav-payments",
+  },
+  {
+    title: "Biên tập",
+    url: "/editing",
+    icon: Edit3,
+    testId: "nav-editing",
+  },
+  {
+    title: "Hành chính",
+    url: "/admin-tasks",
+    icon: Briefcase,
+    testId: "nav-admin-tasks",
+  },
+];
+
+const translationManagementItems = [
   {
     title: "Tác phẩm",
     url: "/works",
@@ -55,28 +79,37 @@ const menuItems = [
     testId: "nav-contract-templates",
   },
   {
-    title: "Thanh toán",
-    url: "/payments",
-    icon: CreditCard,
-    testId: "nav-payments",
-  },
-  {
     title: "Thẩm định",
     url: "/reviews",
     icon: ClipboardCheck,
     testId: "nav-reviews",
   },
+];
+
+const workManagementItems = [
   {
-    title: "Biên tập",
-    url: "/editing",
-    icon: Edit3,
-    testId: "nav-editing",
+    title: "Bảng theo dõi công việc",
+    url: "/work-tasks",
+    icon: ListChecks,
+    testId: "nav-work-tasks",
   },
   {
-    title: "Hành chính",
-    url: "/admin-tasks",
-    icon: Briefcase,
-    testId: "nav-admin-tasks",
+    title: "Báo cáo công việc chung",
+    url: "/work-reports",
+    icon: BarChart3,
+    testId: "nav-work-reports",
+  },
+  {
+    title: "Báo cáo công việc cá nhân",
+    url: "/work-reports/personal",
+    icon: BarChart3,
+    testId: "nav-work-reports-personal",
+  },
+  {
+    title: "Kế hoạch làm việc",
+    url: "/work-plan",
+    icon: Calendar,
+    testId: "nav-work-plan",
   },
 ];
 
@@ -86,6 +119,7 @@ export function AppSidebar() {
   
   const canManage = canManageUsers(user);
   const canManageTranslatorsList = canManageTranslators(user);
+  const canAccessReports = canAccessWorkReports(user);
 
   const bottomMenuItems = [
     {
@@ -104,16 +138,6 @@ export function AppSidebar() {
           },
         ]
       : []),
-    ...(canManageTranslatorsList
-      ? [
-          {
-            title: "Danh sách dịch giả",
-            url: "/translators",
-            icon: Languages,
-            testId: "nav-translators",
-          },
-        ]
-      : []),
     {
       title: "Trợ lý AI",
       url: "/ai-assistant",
@@ -126,6 +150,21 @@ export function AppSidebar() {
       icon: Settings,
       testId: "nav-settings",
     },
+  ];
+
+  // Danh sách dịch giả được thêm vào nhóm Quản lý hợp phần dịch thuật
+  const translationItemsWithPermissions = [
+    ...translationManagementItems,
+    ...(canManageTranslatorsList
+      ? [
+          {
+            title: "Danh sách dịch giả",
+            url: "/translators",
+            icon: Languages,
+            testId: "nav-translators",
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -147,7 +186,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Chính</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
+              {mainMenuItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton 
                     asChild
@@ -164,6 +203,52 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Quản lý hợp phần dịch thuật</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {translationItemsWithPermissions.map((item) => (
+                <SidebarMenuItem key={item.url}>
+                  <SidebarMenuButton 
+                    asChild
+                    isActive={location === item.url}
+                    data-testid={item.testId}
+                  >
+                    <Link href={item.url}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {canAccessReports && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Quản lý công việc</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {workManagementItems.map((item) => (
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton 
+                      asChild
+                      isActive={location === item.url}
+                      data-testid={item.testId}
+                    >
+                      <Link href={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         <SidebarGroup>
           <SidebarGroupLabel>Khác</SidebarGroupLabel>

@@ -793,6 +793,163 @@ class ApiClient {
       responseType: "blob",
     });
   }
+
+  // Work Tasks API
+  async getWorkTasks(params?: {
+    page?: number;
+    page_size?: number;
+    work_group?: string;
+    status?: string;
+    assigned_to?: number;
+    frequency?: string;
+    priority?: string;
+    search?: string;
+  }): Promise<{ count: number; next: string | null; previous: string | null; results: WorkTask[] }> {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const queryString = queryParams.toString();
+    return this.request<{ count: number; next: string | null; previous: string | null; results: WorkTask[] }>(
+      `/api/v1/works/tasks/${queryString ? `?${queryString}` : ""}`
+    );
+  }
+
+  async getWorkTask(id: number | string): Promise<WorkTask> {
+    return this.request<WorkTask>(`/api/v1/works/tasks/${id}/`);
+  }
+
+  async createWorkTask(task: Partial<WorkTask>): Promise<WorkTask> {
+    return this.request<WorkTask>("/api/v1/works/tasks/", {
+      method: "POST",
+      body: JSON.stringify(task),
+    });
+  }
+
+  async updateWorkTask(id: number | string, task: Partial<WorkTask>): Promise<WorkTask> {
+    return this.request<WorkTask>(`/api/v1/works/tasks/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(task),
+    });
+  }
+
+  async deleteWorkTask(id: number | string): Promise<void> {
+    return this.request<void>(`/api/v1/works/tasks/${id}/`, {
+      method: "DELETE",
+    });
+  }
+
+  async getWorkTaskStatistics(params?: {
+    month?: number;
+    year?: number;
+  }): Promise<WorkTaskStatistics> {
+    const queryParams = new URLSearchParams();
+    if (params?.month) queryParams.append("month", params.month.toString());
+    if (params?.year) queryParams.append("year", params.year.toString());
+    const queryString = queryParams.toString();
+    return this.request<WorkTaskStatistics>(
+      `/api/v1/works/tasks/statistics/${queryString ? `?${queryString}` : ""}`
+    );
+  }
+
+  async getPersonalWorkTaskStatistics(userId?: number, params?: {
+    month?: number;
+    year?: number;
+  }): Promise<PersonalWorkTaskStatistics> {
+    const queryParams = new URLSearchParams();
+    if (params?.month) queryParams.append("month", params.month.toString());
+    if (params?.year) queryParams.append("year", params.year.toString());
+    const queryString = queryParams.toString();
+    const url = userId 
+      ? `/api/v1/works/tasks/statistics/personal/${userId}/${queryString ? `?${queryString}` : ""}`
+      : `/api/v1/works/tasks/statistics/personal/${queryString ? `?${queryString}` : ""}`;
+    return this.request<PersonalWorkTaskStatistics>(url);
+  }
+
+  // Payment methods
+  async getPayments(params?: {
+    page?: number;
+    page_size?: number;
+    work_group?: string;
+    category?: string;
+    status?: string;
+    date_from?: string;
+    date_to?: string;
+    recipient_id?: number;
+    search?: string;
+  }): Promise<{ count: number; next: string | null; previous: string | null; results: Payment[] }> {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const queryString = queryParams.toString();
+    return this.request<{ count: number; next: string | null; previous: string | null; results: Payment[] }>(
+      `/api/v1/payments/${queryString ? `?${queryString}` : ""}`
+    );
+  }
+
+  async getPayment(id: number | string): Promise<Payment> {
+    return this.request<Payment>(`/api/v1/payments/${id}/`);
+  }
+
+  async createPayment(payment: Partial<Payment>): Promise<Payment> {
+    return this.request<Payment>("/api/v1/payments/", {
+      method: "POST",
+      body: JSON.stringify(payment),
+    });
+  }
+
+  async updatePayment(id: number | string, payment: Partial<Payment>): Promise<Payment> {
+    return this.request<Payment>(`/api/v1/payments/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(payment),
+    });
+  }
+
+  async deletePayment(id: number | string): Promise<void> {
+    return this.request<void>(`/api/v1/payments/${id}/`, {
+      method: "DELETE",
+    });
+  }
+
+  async approvePayment(id: number | string, action: 'approve' | 'reject', rejection_reason?: string): Promise<Payment> {
+    return this.request<Payment>(`/api/v1/payments/${id}/approve/`, {
+      method: "POST",
+      body: JSON.stringify({ action, rejection_reason }),
+    });
+  }
+
+  async markPaymentPaid(id: number | string): Promise<Payment> {
+    return this.request<Payment>(`/api/v1/payments/${id}/mark_paid/`, {
+      method: "POST",
+    });
+  }
+
+  async getPaymentSummary(params?: { work_group?: string }): Promise<PaymentSummary> {
+    const queryParams = new URLSearchParams();
+    if (params?.work_group) queryParams.append("work_group", params.work_group);
+    const queryString = queryParams.toString();
+    return this.request<PaymentSummary>(
+      `/api/v1/payments/summary/${queryString ? `?${queryString}` : ""}`
+    );
+  }
+
+  async getPaymentCategories(params?: { work_group?: string }): Promise<PaymentCategoryConfig[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.work_group) queryParams.append("work_group", params.work_group);
+    const queryString = queryParams.toString();
+    return this.request<PaymentCategoryConfig[]>(
+      `/api/v1/payments/categories/${queryString ? `?${queryString}` : ""}`
+    );
+  }
 }
 
 // Export ContractFormValues type for use in other files
@@ -927,6 +1084,207 @@ export interface ContractTemplate {
   created_at: string;
   updated_at: string;
   created_by?: number;
+}
+
+export interface WorkTask {
+  id: number;
+  title: string;
+  description?: string;
+  work_group: string;
+  frequency: string;
+  priority: string;
+  assigned_to?: number;
+  assigned_to_name?: string;
+  created_by?: number;
+  created_by_name?: string;
+  status: string;
+  start_date?: string;
+  due_date?: string;
+  completed_date?: string;
+  progress_percent: number;
+  notes?: string;
+  is_active: boolean;
+  is_overdue?: boolean;
+  is_on_time?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkTaskStatistics {
+  month: number;
+  year: number;
+  total_tasks: number;
+  by_status: Array<{ status: string; count: number }>;
+  by_group: Array<{ work_group: string; count: number }>;
+  by_frequency: Array<{ frequency: string; count: number }>;
+  by_priority: Array<{ priority: string; count: number }>;
+  summary: {
+    completed: number;
+    not_completed: number;
+    in_progress: number;
+  };
+  status_breakdown: {
+    hoan_thanh: number;
+    khong_hoan_thanh: number;
+    dang_tien_hanh: number;
+    cham_tien_do: number;
+    hoan_thanh_truoc_han: number;
+    da_huy: number;
+    tam_hoan: number;
+    chua_bat_dau: number;
+  };
+  group_breakdown: {
+    [key: string]: {
+      name: string;
+      total: number;
+      completed: number;
+      in_progress: number;
+      behind_schedule: number;
+    };
+  };
+  frequency_breakdown: {
+    [key: string]: {
+      name: string;
+      count: number;
+    };
+  };
+  incomplete_by_group: {
+    [key: string]: {
+      name: string;
+      count: number;
+    };
+  };
+  behind_schedule_by_group: {
+    [key: string]: {
+      name: string;
+      count: number;
+    };
+  };
+  high_priority_tasks: Array<{
+    work_group: string;
+    in_progress: number;
+    completed: number;
+    not_completed: number;
+  }>;
+  completed_behind_schedule: number;
+  progress_by_group: {
+    [key: string]: {
+      name: string;
+      in_progress: number;
+      behind_schedule: number;
+      ratio: number;
+    };
+  };
+}
+
+export interface PersonalWorkTaskStatistics {
+  user_id: number;
+  month: number;
+  year: number;
+  total_tasks: number;
+  by_status: Array<{ status: string; count: number }>;
+  by_group: Array<{ work_group: string; count: number }>;
+  by_frequency: Array<{ frequency: string; count: number }>;
+  summary: {
+    completed: number;
+    not_completed: number;
+    in_progress: number;
+  };
+  status_breakdown: {
+    hoan_thanh: number;
+    khong_hoan_thanh: number;
+    dang_tien_hanh: number;
+    cham_tien_do: number;
+    hoan_thanh_truoc_han: number;
+    da_huy: number;
+    tam_hoan: number;
+    chua_bat_dau: number;
+  };
+  group_breakdown: {
+    [key: string]: {
+      name: string;
+      total: number;
+      completed: number;
+      in_progress: number;
+      behind_schedule: number;
+    };
+  };
+}
+
+export interface PaymentCategoryConfig {
+  id: number;
+  work_group: string;
+  work_group_display: string;
+  category_code: string;
+  category_name: string;
+  description?: string;
+  can_view_roles: string[];
+  can_create_roles: string[];
+  can_approve_roles: string[];
+  requires_approval: boolean;
+  approval_workflow: Record<string, any>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Payment {
+  id: number;
+  work_group: string;
+  work_group_display: string;
+  payment_category: string;
+  payment_type: string;
+  contract?: number;
+  contract_number?: string;
+  work?: number;
+  work_name?: string;
+  amount: number;
+  currency: string;
+  description?: string;
+  recipient: number;
+  recipient_name: string;
+  recipient_type: string;
+  status: string;
+  status_display: string;
+  request_date: string;
+  approved_date?: string;
+  paid_date?: string;
+  requested_by?: number;
+  requested_by_name?: string;
+  approved_by?: number;
+  approved_by_name?: string;
+  rejection_reason?: string;
+  can_be_approved: boolean;
+  can_be_paid: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentSummary {
+  by_status: {
+    [key: string]: {
+      label: string;
+      count: number;
+      total_amount: number;
+    };
+  };
+  by_work_group: {
+    [key: string]: {
+      label: string;
+      count: number;
+      total_amount: number;
+      by_status: {
+        [key: string]: {
+          label: string;
+          count: number;
+        };
+      };
+    };
+  };
+  total: {
+    count: number;
+    total_amount: number;
+  };
 }
 
 export const apiClient = new ApiClient();
