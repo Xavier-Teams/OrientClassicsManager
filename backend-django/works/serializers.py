@@ -1,5 +1,8 @@
 from rest_framework import serializers
-from .models import TranslationWork, TranslationPart, Stage, WorkTask
+from .models import (
+    TranslationWork, TranslationPart, Stage, WorkTask,
+    CustomField, CustomFieldValue, CustomGroup, ViewPreference
+)
 
 
 class TranslationPartSerializer(serializers.ModelSerializer):
@@ -173,6 +176,7 @@ class WorkTaskSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, allow_null=True)
     is_overdue = serializers.ReadOnlyField()
     is_on_time = serializers.ReadOnlyField()
+    custom_field_values = serializers.SerializerMethodField()
     
     class Meta:
         model = WorkTask
@@ -184,6 +188,128 @@ class WorkTaskSerializer(serializers.ModelSerializer):
             'status', 'start_date', 'due_date', 'completed_date',
             'progress_percent', 'notes', 'is_active',
             'is_overdue', 'is_on_time',
+            'custom_field_values',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'is_overdue', 'is_on_time']
+    
+    def get_custom_field_values(self, obj):
+        """Lấy giá trị các custom fields"""
+        values = obj.custom_field_values.all()
+        return {
+            value.field.id: {
+                'field_id': value.field.id,
+                'field_name': value.field.name,
+                'field_type': value.field.field_type,
+                'value': value.get_value()
+            }
+            for value in values
+        }
+
+
+class CustomFieldSerializer(serializers.ModelSerializer):
+    """Serializer cho CustomField"""
+    created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = CustomField
+        fields = [
+            'id', 'name', 'field_type', 'description',
+            'options', 'is_required', 'is_visible', 'order',
+            'created_by', 'created_by_name',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class CustomFieldValueSerializer(serializers.ModelSerializer):
+    """Serializer cho CustomFieldValue"""
+    field_name = serializers.CharField(source='field.name', read_only=True)
+    field_type = serializers.CharField(source='field.field_type', read_only=True)
+    value = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CustomFieldValue
+        fields = [
+            'id', 'task', 'field', 'field_name', 'field_type',
+            'value_text', 'value_number', 'value_date', 'value_boolean', 'value_json',
+            'value', 'updated_at'
+        ]
+        read_only_fields = ['id', 'updated_at']
+    
+    def get_value(self, obj):
+        """Lấy giá trị từ object"""
+        return obj.get_value()
+    
+    def validate(self, data):
+        """Validate dựa trên field type"""
+        field = data.get('field')
+        if not field:
+            return data
+        
+        # Set appropriate value field based on field_type
+        if field.field_type in ['text', 'textarea', 'email', 'phone', 'website']:
+            if 'value_text' not in data:
+                raise serializers.ValidationError({'value_text': 'This field is required'})
+        elif field.field_type in ['number', 'money']:
+            if 'value_number' not in data:
+                raise serializers.ValidationError({'value_number': 'This field is required'})
+        elif field.field_type == 'date':
+            if 'value_date' not in data:
+                raise serializers.ValidationError({'value_date': 'This field is required'})
+        elif field.field_type == 'checkbox':
+            if 'value_boolean' not in data:
+                raise serializers.ValidationError({'value_boolean': 'This field is required'})
+        elif field.field_type in ['dropdown', 'labels']:
+            if 'value_json' not in data:
+                raise serializers.ValidationError({'value_json': 'This field is required'})
+        
+        return data
+    
+    def create(self, validated_data):
+        """Create và set value"""
+        instance = super().create(validated_data)
+        # Value sẽ được set từ validated_data
+        return instance
+    
+    def update(self, instance, validated_data):
+        """Update và set value"""
+        instance = super().update(instance, validated_data)
+        return instance
+
+
+class CustomGroupSerializer(serializers.ModelSerializer):
+    """Serializer cho CustomGroup"""
+    created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, allow_null=True)
+    task_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CustomGroup
+        fields = [
+            'id', 'name', 'color', 'order', 'is_default', 'is_active',
+            'status_mapping', 'created_by', 'created_by_name',
+            'task_count', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_task_count(self, obj):
+        """Đếm số task trong nhóm này"""
+        if obj.status_mapping:
+            from .models import WorkTask
+            return WorkTask.objects.filter(
+                is_active=True,
+                status__in=obj.status_mapping
+            ).count()
+        return 0
+
+
+class ViewPreferenceSerializer(serializers.ModelSerializer):
+    """Serializer cho ViewPreference"""
+    
+    class Meta:
+        model = ViewPreference
+        fields = [
+            'id', 'user', 'view_type', 'config', 'is_default',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']

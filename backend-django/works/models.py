@@ -401,3 +401,247 @@ class WorkTask(models.Model):
         if self.due_date and self.status == 'hoan_thanh' and self.completed_date:
             return self.completed_date <= self.due_date
         return False
+
+
+class CustomField(models.Model):
+    """Trường tùy chỉnh cho WorkTask"""
+    
+    FIELD_TYPE_CHOICES = [
+        ('text', 'Text'),
+        ('textarea', 'Text Area (Long Text)'),
+        ('number', 'Number'),
+        ('date', 'Date'),
+        ('dropdown', 'Dropdown'),
+        ('checkbox', 'Checkbox'),
+        ('money', 'Money'),
+        ('website', 'Website'),
+        ('email', 'Email'),
+        ('phone', 'Phone'),
+        ('labels', 'Labels'),
+        ('formula', 'Formula'),
+    ]
+    
+    name = models.CharField(max_length=200, verbose_name='Tên trường')
+    field_type = models.CharField(
+        max_length=50,
+        choices=FIELD_TYPE_CHOICES,
+        verbose_name='Loại trường'
+    )
+    description = models.TextField(blank=True, verbose_name='Mô tả')
+    
+    # Options for dropdown, labels, etc.
+    options = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Tùy chọn',
+        help_text='Danh sách các giá trị cho dropdown/labels'
+    )
+    
+    # Display settings
+    is_required = models.BooleanField(default=False, verbose_name='Bắt buộc')
+    is_visible = models.BooleanField(default=True, verbose_name='Hiển thị')
+    order = models.IntegerField(default=0, verbose_name='Thứ tự')
+    
+    # Created by
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_custom_fields',
+        verbose_name='Người tạo'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Ngày tạo')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ngày cập nhật')
+    
+    class Meta:
+        db_table = 'custom_fields'
+        verbose_name = 'Trường tùy chỉnh'
+        verbose_name_plural = 'Trường tùy chỉnh'
+        ordering = ['order', 'name']
+        indexes = [
+            models.Index(fields=['field_type'], name='idx_custom_field_type'),
+            models.Index(fields=['is_visible'], name='idx_custom_field_visible'),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_field_type_display()})"
+
+
+class CustomFieldValue(models.Model):
+    """Giá trị của Custom Field cho một WorkTask cụ thể"""
+    
+    task = models.ForeignKey(
+        WorkTask,
+        on_delete=models.CASCADE,
+        related_name='custom_field_values',
+        verbose_name='Công việc'
+    )
+    field = models.ForeignKey(
+        CustomField,
+        on_delete=models.CASCADE,
+        related_name='values',
+        verbose_name='Trường'
+    )
+    
+    # Store value as JSON to support different field types
+    value_text = models.TextField(blank=True, null=True, verbose_name='Giá trị text')
+    value_number = models.DecimalField(
+        max_digits=20,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Giá trị số'
+    )
+    value_date = models.DateField(null=True, blank=True, verbose_name='Giá trị ngày')
+    value_boolean = models.BooleanField(null=True, blank=True, verbose_name='Giá trị boolean')
+    value_json = models.JSONField(null=True, blank=True, verbose_name='Giá trị JSON')
+    
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ngày cập nhật')
+    
+    class Meta:
+        db_table = 'custom_field_values'
+        verbose_name = 'Giá trị trường tùy chỉnh'
+        verbose_name_plural = 'Giá trị trường tùy chỉnh'
+        unique_together = [['task', 'field']]
+        indexes = [
+            models.Index(fields=['task', 'field'], name='idx_custom_value_task_field'),
+        ]
+    
+    def __str__(self):
+        return f"{self.task.title} - {self.field.name}"
+    
+    def get_value(self):
+        """Lấy giá trị dựa trên loại trường"""
+        if self.field.field_type in ['text', 'textarea', 'email', 'phone', 'website']:
+            return self.value_text
+        elif self.field.field_type == 'number' or self.field.field_type == 'money':
+            return self.value_number
+        elif self.field.field_type == 'date':
+            return self.value_date
+        elif self.field.field_type == 'checkbox':
+            return self.value_boolean
+        elif self.field.field_type in ['dropdown', 'labels']:
+            return self.value_json or []
+        else:
+            return self.value_json
+    
+    def set_value(self, value):
+        """Đặt giá trị dựa trên loại trường"""
+        if self.field.field_type in ['text', 'textarea', 'email', 'phone', 'website']:
+            self.value_text = str(value) if value else None
+        elif self.field.field_type == 'number' or self.field.field_type == 'money':
+            self.value_number = float(value) if value else None
+        elif self.field.field_type == 'date':
+            self.value_date = value
+        elif self.field.field_type == 'checkbox':
+            self.value_boolean = bool(value) if value is not None else None
+        elif self.field.field_type in ['dropdown', 'labels']:
+            self.value_json = value if isinstance(value, list) else [value] if value else []
+        else:
+            self.value_json = value
+
+
+class CustomGroup(models.Model):
+    """Nhóm tùy chỉnh cho Kanban Board View"""
+    
+    name = models.CharField(max_length=200, verbose_name='Tên nhóm')
+    color = models.CharField(
+        max_length=7,
+        default='#6366f1',
+        verbose_name='Màu sắc',
+        help_text='Màu hex (ví dụ: #6366f1)'
+    )
+    order = models.IntegerField(default=0, verbose_name='Thứ tự')
+    is_default = models.BooleanField(
+        default=False,
+        verbose_name='Mặc định',
+        help_text='Nhóm mặc định (ví dụ: TO DO, IN PROGRESS, DONE)'
+    )
+    is_active = models.BooleanField(default=True, verbose_name='Hoạt động')
+    
+    # Mapping với status values (optional)
+    status_mapping = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Ánh xạ trạng thái',
+        help_text='Danh sách các status values được map vào nhóm này'
+    )
+    
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_custom_groups',
+        verbose_name='Người tạo'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Ngày tạo')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ngày cập nhật')
+    
+    class Meta:
+        db_table = 'custom_groups'
+        verbose_name = 'Nhóm tùy chỉnh'
+        verbose_name_plural = 'Nhóm tùy chỉnh'
+        ordering = ['order', 'name']
+        indexes = [
+            models.Index(fields=['is_active'], name='idx_custom_group_active'),
+            models.Index(fields=['is_default'], name='idx_custom_group_default'),
+        ]
+    
+    def __str__(self):
+        return self.name
+
+
+class ViewPreference(models.Model):
+    """Cấu hình view của user (List, Board, Calendar, Gantt)"""
+    
+    VIEW_TYPE_CHOICES = [
+        ('list', 'List'),
+        ('board', 'Board/Kanban'),
+        ('calendar', 'Calendar'),
+        ('gantt', 'Gantt'),
+    ]
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='view_preferences',
+        verbose_name='Người dùng'
+    )
+    view_type = models.CharField(
+        max_length=20,
+        choices=VIEW_TYPE_CHOICES,
+        verbose_name='Loại view'
+    )
+    
+    # Configuration as JSON
+    config = models.JSONField(
+        default=dict,
+        verbose_name='Cấu hình',
+        help_text='Cấu hình view (visible columns, grouping, sorting, etc.)'
+    )
+    
+    is_default = models.BooleanField(
+        default=False,
+        verbose_name='Mặc định',
+        help_text='View mặc định cho user'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Ngày tạo')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ngày cập nhật')
+    
+    class Meta:
+        db_table = 'view_preferences'
+        verbose_name = 'Cấu hình view'
+        verbose_name_plural = 'Cấu hình view'
+        unique_together = [['user', 'view_type']]
+        indexes = [
+            models.Index(fields=['user', 'view_type'], name='idx_view_pref_user_type'),
+            models.Index(fields=['is_default'], name='idx_view_pref_default'),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.full_name if hasattr(self.user, 'full_name') else self.user.username} - {self.get_view_type_display()}"

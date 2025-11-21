@@ -62,41 +62,43 @@ class ApiClient {
   private getAuthToken(): string | null {
     // Try to get token from localStorage
     // Check multiple possible keys
-    const token = localStorage.getItem("access_token") ||
+    const token =
+      localStorage.getItem("access_token") ||
       localStorage.getItem("token") ||
       localStorage.getItem("accessToken") ||
       localStorage.getItem("access") ||
       null;
-    
+
     if (!token) {
       // Debug: log available keys to help troubleshoot
       const allKeys = Object.keys(localStorage);
-      const tokenKeys = allKeys.filter(key => 
-        key.toLowerCase().includes('token') || 
-        key.toLowerCase().includes('access') ||
-        key.toLowerCase().includes('auth')
+      const tokenKeys = allKeys.filter(
+        (key) =>
+          key.toLowerCase().includes("token") ||
+          key.toLowerCase().includes("access") ||
+          key.toLowerCase().includes("auth")
       );
       console.warn("No auth token found in localStorage.", {
         searchedKeys: ["access_token", "token", "accessToken", "access"],
         foundTokenKeys: tokenKeys,
-        allKeys: allKeys
+        allKeys: allKeys,
       });
     }
-    
+
     return token;
   }
 
-  private   async request<T>(
+  private async request<T>(
     endpoint: string,
     options?: RequestInit & { suppress404Log?: boolean }
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const token = this.getAuthToken();
-    
+
     // Build headers object - handle both Headers object and plain object
     let headers: HeadersInit;
     const isFormData = options?.body instanceof FormData;
-    
+
     if (options?.headers instanceof Headers) {
       // If headers is a Headers object, convert to plain object
       headers = {};
@@ -132,7 +134,11 @@ class ApiClient {
       if (response.status === 401) {
         // Try to refresh token if we have refresh_token
         const refreshToken = localStorage.getItem("refresh_token");
-        if (refreshToken && endpoint !== "/api/v1/auth/refresh/" && endpoint !== "/api/v1/auth/login/") {
+        if (
+          refreshToken &&
+          endpoint !== "/api/v1/auth/refresh/" &&
+          endpoint !== "/api/v1/auth/login/"
+        ) {
           console.log("Access token expired, attempting to refresh...");
           const newAccessToken = await this.refreshToken();
           if (newAccessToken) {
@@ -141,7 +147,7 @@ class ApiClient {
             return this.request<T>(endpoint, options);
           }
         }
-        
+
         // If refresh failed or no refresh token, clear tokens
         localStorage.removeItem("access_token");
         localStorage.removeItem("token");
@@ -151,12 +157,15 @@ class ApiClient {
       // Try to get error details from response
       let errorMessage = `API error: ${response.statusText}`;
       let errorData: any = null;
-      
+
       try {
         const text = await response.text();
         if (text) {
           // Check if it's HTML (Django 404 page)
-          if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+          if (
+            text.trim().startsWith("<!DOCTYPE") ||
+            text.trim().startsWith("<html")
+          ) {
             // Extract meaningful info from Django 404 page
             if (response.status === 404) {
               const urlMatch = text.match(/Request URL:.*?<td>(.*?)<\/td>/);
@@ -177,36 +186,43 @@ class ApiClient {
       } catch (e) {
         // If can't parse error, use status text
       }
-      
+
       if (errorData) {
         if (errorData.detail) {
           errorMessage = errorData.detail;
         } else if (errorData.message) {
           errorMessage = errorData.message;
-        } else if (typeof errorData === 'object') {
+        } else if (typeof errorData === "object") {
           // Format validation errors
           const errors = Object.entries(errorData)
-            .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
-            .join('; ');
+            .map(
+              ([key, value]) =>
+                `${key}: ${Array.isArray(value) ? value.join(", ") : value}`
+            )
+            .join("; ");
           errorMessage = errors || errorMessage;
         }
       }
-      
+
       // Add status code to error for better debugging
       const error = new Error(errorMessage) as any;
       error.status = response.status;
       error.response = { status: response.status, data: errorData };
-      
+
       // Suppress console error for 404 if suppress404Log is true
       if (response.status === 404 && options?.suppress404Log) {
         // Don't log to console, just throw silently
       } else {
         // Log error for debugging (but not for suppressed 404s)
         if (response.status !== 404) {
-          console.error(`API Error [${response.status}]:`, endpoint, errorMessage);
+          console.error(
+            `API Error [${response.status}]:`,
+            endpoint,
+            errorMessage
+          );
         }
       }
-      
+
       throw error;
     }
 
@@ -274,7 +290,10 @@ class ApiClient {
   // }
 
   // Authentication API
-  async login(username: string, password: string): Promise<{
+  async login(
+    username: string,
+    password: string
+  ): Promise<{
     access: string;
     refresh: string;
     user: User;
@@ -296,13 +315,18 @@ class ApiClient {
       }
       console.log("Token saved to localStorage:", {
         access_token: response.access.substring(0, 20) + "...",
-        refresh_token: response.refresh ? response.refresh.substring(0, 20) + "..." : "none"
+        refresh_token: response.refresh
+          ? response.refresh.substring(0, 20) + "..."
+          : "none",
       });
     } else {
       console.error("No access token in login response:", response);
       // Try to extract from response if it's nested
-      if (response && typeof response === 'object') {
-        const access = (response as any).access || (response as any).access_token || (response as any).token;
+      if (response && typeof response === "object") {
+        const access =
+          (response as any).access ||
+          (response as any).access_token ||
+          (response as any).token;
         if (access) {
           localStorage.setItem("access_token", access);
           console.log("Token extracted and saved from nested response");
@@ -366,7 +390,12 @@ class ApiClient {
     page?: number;
     page_size?: number;
     search?: string;
-  }): Promise<{ count: number; next: string | null; previous: string | null; results: User[] }> {
+  }): Promise<{
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: User[];
+  }> {
     const queryParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -376,9 +405,12 @@ class ApiClient {
       });
     }
     const queryString = queryParams.toString();
-    return this.request<{ count: number; next: string | null; previous: string | null; results: User[] }>(
-      `/api/v1/auth/users/${queryString ? `?${queryString}` : ""}`
-    );
+    return this.request<{
+      count: number;
+      next: string | null;
+      previous: string | null;
+      results: User[];
+    }>(`/api/v1/auth/users/${queryString ? `?${queryString}` : ""}`);
   }
 
   async getUser(id: number | string): Promise<User> {
@@ -420,15 +452,27 @@ class ApiClient {
     page_size?: number;
     search?: string;
     active?: boolean;
-  }): Promise<{ count: number; next: string | null; previous: string | null; results: Translator[] }> {
+  }): Promise<{
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: Translator[];
+  }> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append("page", params.page.toString());
-    if (params?.page_size) queryParams.append("page_size", params.page_size.toString());
+    if (params?.page_size)
+      queryParams.append("page_size", params.page_size.toString());
     if (params?.search) queryParams.append("search", params.search);
-    if (params?.active !== undefined) queryParams.append("active", params.active.toString());
-    
+    if (params?.active !== undefined)
+      queryParams.append("active", params.active.toString());
+
     const queryString = queryParams.toString();
-    return this.request<{ count: number; next: string | null; previous: string | null; results: Translator[] }>(
+    return this.request<{
+      count: number;
+      next: string | null;
+      previous: string | null;
+      results: Translator[];
+    }>(
       `/api/v1/translators/translators/${queryString ? `?${queryString}` : ""}`
     );
   }
@@ -460,7 +504,10 @@ class ApiClient {
     });
   }
 
-  async updateTranslator(id: number | string, translator: Partial<Translator>): Promise<Translator> {
+  async updateTranslator(
+    id: number | string,
+    translator: Partial<Translator>
+  ): Promise<Translator> {
     return this.request<Translator>(`/api/v1/translators/translators/${id}/`, {
       method: "PATCH",
       body: JSON.stringify(translator),
@@ -474,15 +521,21 @@ class ApiClient {
   }
 
   async activateTranslator(id: number | string): Promise<Translator> {
-    return this.request<Translator>(`/api/v1/translators/translators/${id}/activate/`, {
-      method: "POST",
-    });
+    return this.request<Translator>(
+      `/api/v1/translators/translators/${id}/activate/`,
+      {
+        method: "POST",
+      }
+    );
   }
 
   async deactivateTranslator(id: number | string): Promise<Translator> {
-    return this.request<Translator>(`/api/v1/translators/translators/${id}/deactivate/`, {
-      method: "POST",
-    });
+    return this.request<Translator>(
+      `/api/v1/translators/translators/${id}/deactivate/`,
+      {
+        method: "POST",
+      }
+    );
   }
 
   async updateProfile(user: Partial<User>): Promise<User> {
@@ -505,7 +558,9 @@ class ApiClient {
   }
 
   // Translation Parts API
-  async getTranslationParts(): Promise<Array<{ id: number; name: string; code: string }>> {
+  async getTranslationParts(): Promise<
+    Array<{ id: number; name: string; code: string }>
+  > {
     const response = await this.request<{
       count: number;
       results: Array<{ id: number; name: string; code: string }>;
@@ -548,28 +603,41 @@ class ApiClient {
     work_id?: number;
     translation_part?: string;
     stage?: number;
-  }): Promise<{ count: number; next: string | null; previous: string | null; results: Contract[] }> {
+  }): Promise<{
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: Contract[];
+  }> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append("page", params.page.toString());
-    if (params?.page_size) queryParams.append("page_size", params.page_size.toString());
+    if (params?.page_size)
+      queryParams.append("page_size", params.page_size.toString());
     if (params?.search) queryParams.append("search", params.search);
     if (params?.status) queryParams.append("status", params.status);
-    if (params?.work_id) queryParams.append("work_id", params.work_id.toString());
-    if (params?.translation_part) queryParams.append("translation_part", params.translation_part);
+    if (params?.work_id)
+      queryParams.append("work_id", params.work_id.toString());
+    if (params?.translation_part)
+      queryParams.append("translation_part", params.translation_part);
     if (params?.stage) queryParams.append("stage", params.stage.toString());
 
     const queryString = queryParams.toString();
-    return this.request<{ count: number; next: string | null; previous: string | null; results: Contract[] }>(
-      `/api/v1/contracts/${queryString ? `?${queryString}` : ""}`
-    );
+    return this.request<{
+      count: number;
+      next: string | null;
+      previous: string | null;
+      results: Contract[];
+    }>(`/api/v1/contracts/${queryString ? `?${queryString}` : ""}`);
   }
-  
+
   async getContractStatistics(): Promise<ContractStatistics> {
     return this.request<ContractStatistics>("/api/v1/contracts/statistics/");
   }
-  
+
   async getContractProgressReport(): Promise<ContractProgressReport> {
-    return this.request<ContractProgressReport>("/api/v1/contracts/progress_report/");
+    return this.request<ContractProgressReport>(
+      "/api/v1/contracts/progress_report/"
+    );
   }
 
   async getContract(id: number | string): Promise<Contract> {
@@ -601,18 +669,33 @@ class ApiClient {
     contract_file?: File;
   }): Promise<Contract> {
     const { contract_file, ...contractData } = contract;
-    
+
     // If there's a file, use FormData
     if (contract_file instanceof File) {
       const formData = new FormData();
       const processedData = {
         ...contractData,
-        total_amount: typeof contractData.total_amount === "string" ? parseFloat(contractData.total_amount) : contractData.total_amount,
-        advance_payment_1: contractData.advance_payment_1 ? (typeof contractData.advance_payment_1 === "string" ? parseFloat(contractData.advance_payment_1) : contractData.advance_payment_1) : 0,
-        advance_payment_2: contractData.advance_payment_2 ? (typeof contractData.advance_payment_2 === "string" ? parseFloat(contractData.advance_payment_2) : contractData.advance_payment_2) : 0,
-        final_payment: contractData.final_payment ? (typeof contractData.final_payment === "string" ? parseFloat(contractData.final_payment) : contractData.final_payment) : 0,
+        total_amount:
+          typeof contractData.total_amount === "string"
+            ? parseFloat(contractData.total_amount)
+            : contractData.total_amount,
+        advance_payment_1: contractData.advance_payment_1
+          ? typeof contractData.advance_payment_1 === "string"
+            ? parseFloat(contractData.advance_payment_1)
+            : contractData.advance_payment_1
+          : 0,
+        advance_payment_2: contractData.advance_payment_2
+          ? typeof contractData.advance_payment_2 === "string"
+            ? parseFloat(contractData.advance_payment_2)
+            : contractData.advance_payment_2
+          : 0,
+        final_payment: contractData.final_payment
+          ? typeof contractData.final_payment === "string"
+            ? parseFloat(contractData.final_payment)
+            : contractData.final_payment
+          : 0,
       };
-      
+
       Object.entries(processedData).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
           if (typeof value === "object" && !(value instanceof File)) {
@@ -623,29 +706,47 @@ class ApiClient {
         }
       });
       formData.append("contract_file", contract_file);
-      
+
       return this.request<Contract>("/api/v1/contracts/", {
         method: "POST",
         body: formData,
       });
     }
-    
+
     // Otherwise use JSON
     return this.request<Contract>("/api/v1/contracts/", {
       method: "POST",
       body: JSON.stringify({
         ...contractData,
-        total_amount: typeof contractData.total_amount === "string" ? parseFloat(contractData.total_amount) : contractData.total_amount,
-        advance_payment_1: contractData.advance_payment_1 ? (typeof contractData.advance_payment_1 === "string" ? parseFloat(contractData.advance_payment_1) : contractData.advance_payment_1) : 0,
-        advance_payment_2: contractData.advance_payment_2 ? (typeof contractData.advance_payment_2 === "string" ? parseFloat(contractData.advance_payment_2) : contractData.advance_payment_2) : 0,
-        final_payment: contractData.final_payment ? (typeof contractData.final_payment === "string" ? parseFloat(contractData.final_payment) : contractData.final_payment) : 0,
+        total_amount:
+          typeof contractData.total_amount === "string"
+            ? parseFloat(contractData.total_amount)
+            : contractData.total_amount,
+        advance_payment_1: contractData.advance_payment_1
+          ? typeof contractData.advance_payment_1 === "string"
+            ? parseFloat(contractData.advance_payment_1)
+            : contractData.advance_payment_1
+          : 0,
+        advance_payment_2: contractData.advance_payment_2
+          ? typeof contractData.advance_payment_2 === "string"
+            ? parseFloat(contractData.advance_payment_2)
+            : contractData.advance_payment_2
+          : 0,
+        final_payment: contractData.final_payment
+          ? typeof contractData.final_payment === "string"
+            ? parseFloat(contractData.final_payment)
+            : contractData.final_payment
+          : 0,
       }),
     });
   }
 
-  async updateContract(id: number | string, contract: Partial<Contract> & { contract_file?: File }): Promise<Contract> {
+  async updateContract(
+    id: number | string,
+    contract: Partial<Contract> & { contract_file?: File }
+  ): Promise<Contract> {
     const { contract_file, ...contractData } = contract;
-    
+
     // If there's a file, use FormData
     if (contract_file instanceof File) {
       const formData = new FormData();
@@ -659,13 +760,13 @@ class ApiClient {
         }
       });
       formData.append("contract_file", contract_file);
-      
+
       return this.request<Contract>(`/api/v1/contracts/${id}/`, {
         method: "PATCH",
         body: formData,
       });
     }
-    
+
     // Otherwise use JSON
     return this.request<Contract>(`/api/v1/contracts/${id}/`, {
       method: "PATCH",
@@ -685,18 +786,30 @@ class ApiClient {
     page_size?: number;
     search?: string;
     translation_part?: string;
-  }): Promise<{ count: number; next: string | null; previous: string | null; results: ContractTemplate[] }> {
+  }): Promise<{
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: ContractTemplate[];
+  }> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append("page", params.page.toString());
-    if (params?.page_size) queryParams.append("page_size", params.page_size.toString());
+    if (params?.page_size)
+      queryParams.append("page_size", params.page_size.toString());
     if (params?.search) queryParams.append("search", params.search);
-    if (params?.translation_part) queryParams.append("translation_part", params.translation_part);
+    if (params?.translation_part)
+      queryParams.append("translation_part", params.translation_part);
 
     const queryString = queryParams.toString();
-    const url = `/api/v1/contract-templates/${queryString ? `?${queryString}` : ""}`;
-    return this.request<{ count: number; next: string | null; previous: string | null; results: ContractTemplate[] }>(
-      url
-    );
+    const url = `/api/v1/contract-templates/${
+      queryString ? `?${queryString}` : ""
+    }`;
+    return this.request<{
+      count: number;
+      next: string | null;
+      previous: string | null;
+      results: ContractTemplate[];
+    }>(url);
   }
 
   async getContractTemplate(id: number | string): Promise<ContractTemplate> {
@@ -737,15 +850,18 @@ class ApiClient {
     });
   }
 
-  async updateContractTemplate(id: number | string, template: {
-    name?: string;
-    description?: string;
-    type?: "rich_text" | "word_file";
-    content?: string;
-    file?: File;
-    translation_part?: string;
-    is_default?: boolean;
-  }): Promise<ContractTemplate> {
+  async updateContractTemplate(
+    id: number | string,
+    template: {
+      name?: string;
+      description?: string;
+      type?: "rich_text" | "word_file";
+      content?: string;
+      file?: File;
+      translation_part?: string;
+      is_default?: boolean;
+    }
+  ): Promise<ContractTemplate> {
     const { file, ...templateData } = template;
 
     // If there's a file, use FormData
@@ -758,10 +874,13 @@ class ApiClient {
       });
       formData.append("file", file);
 
-      return this.request<ContractTemplate>(`/api/v1/contract-templates/${id}/`, {
-        method: "PATCH",
-        body: formData,
-      });
+      return this.request<ContractTemplate>(
+        `/api/v1/contract-templates/${id}/`,
+        {
+          method: "PATCH",
+          body: formData,
+        }
+      );
     }
 
     // Otherwise use JSON
@@ -783,15 +902,18 @@ class ApiClient {
     work?: Work,
     translator?: Translator
   ): Promise<Blob> {
-    return this.request<Blob>(`/api/v1/contract-templates/${templateId}/generate/`, {
-      method: "POST",
-      body: JSON.stringify({
-        contract_data: contractData,
-        work: work,
-        translator: translator,
-      }),
-      responseType: "blob",
-    });
+    return this.request<Blob>(
+      `/api/v1/contract-templates/${templateId}/generate/`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          contract_data: contractData,
+          work: work,
+          translator: translator,
+        }),
+        responseType: "blob",
+      }
+    );
   }
 
   // Work Tasks API
@@ -804,7 +926,12 @@ class ApiClient {
     frequency?: string;
     priority?: string;
     search?: string;
-  }): Promise<{ count: number; next: string | null; previous: string | null; results: WorkTask[] }> {
+  }): Promise<{
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: WorkTask[];
+  }> {
     const queryParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -814,9 +941,12 @@ class ApiClient {
       });
     }
     const queryString = queryParams.toString();
-    return this.request<{ count: number; next: string | null; previous: string | null; results: WorkTask[] }>(
-      `/api/v1/works/tasks/${queryString ? `?${queryString}` : ""}`
-    );
+    return this.request<{
+      count: number;
+      next: string | null;
+      previous: string | null;
+      results: WorkTask[];
+    }>(`/api/v1/works/tasks/${queryString ? `?${queryString}` : ""}`);
   }
 
   async getWorkTask(id: number | string): Promise<WorkTask> {
@@ -830,7 +960,10 @@ class ApiClient {
     });
   }
 
-  async updateWorkTask(id: number | string, task: Partial<WorkTask>): Promise<WorkTask> {
+  async updateWorkTask(
+    id: number | string,
+    task: Partial<WorkTask>
+  ): Promise<WorkTask> {
     return this.request<WorkTask>(`/api/v1/works/tasks/${id}/`, {
       method: "PATCH",
       body: JSON.stringify(task),
@@ -839,6 +972,192 @@ class ApiClient {
 
   async deleteWorkTask(id: number | string): Promise<void> {
     return this.request<void>(`/api/v1/works/tasks/${id}/`, {
+      method: "DELETE",
+    });
+  }
+
+  // Custom Fields API
+  async getCustomFields(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+  }): Promise<{ results: CustomField[] }> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append("page", params.page.toString());
+    if (params?.page_size) queryParams.append("page_size", params.page_size.toString());
+    if (params?.search) queryParams.append("search", params.search);
+    const queryString = queryParams.toString();
+    return this.request<{ results: CustomField[] }>(
+      `/api/v1/works/custom-fields/${queryString ? `?${queryString}` : ""}`
+    );
+  }
+
+  async getCustomField(id: number | string): Promise<CustomField> {
+    return this.request<CustomField>(`/api/v1/works/custom-fields/${id}/`);
+  }
+
+  async createCustomField(field: Partial<CustomField>): Promise<CustomField> {
+    return this.request<CustomField>("/api/v1/works/custom-fields/", {
+      method: "POST",
+      body: JSON.stringify(field),
+    });
+  }
+
+  async updateCustomField(
+    id: number | string,
+    field: Partial<CustomField>
+  ): Promise<CustomField> {
+    return this.request<CustomField>(`/api/v1/works/custom-fields/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(field),
+    });
+  }
+
+  async deleteCustomField(id: number | string): Promise<void> {
+    return this.request<void>(`/api/v1/works/custom-fields/${id}/`, {
+      method: "DELETE",
+    });
+  }
+
+  // Custom Field Values API
+  async getCustomFieldValues(params?: {
+    task_id?: number;
+    field_id?: number;
+  }): Promise<{ results: CustomFieldValue[] }> {
+    const queryParams = new URLSearchParams();
+    if (params?.task_id) queryParams.append("task_id", params.task_id.toString());
+    if (params?.field_id) queryParams.append("field_id", params.field_id.toString());
+    const queryString = queryParams.toString();
+    return this.request<{ results: CustomFieldValue[] }>(
+      `/api/v1/works/custom-field-values/${queryString ? `?${queryString}` : ""}`
+    );
+  }
+
+  async createCustomFieldValue(
+    value: Partial<CustomFieldValue>
+  ): Promise<CustomFieldValue> {
+    return this.request<CustomFieldValue>("/api/v1/works/custom-field-values/", {
+      method: "POST",
+      body: JSON.stringify(value),
+    });
+  }
+
+  async updateCustomFieldValue(
+    id: number | string,
+    value: Partial<CustomFieldValue>
+  ): Promise<CustomFieldValue> {
+    return this.request<CustomFieldValue>(
+      `/api/v1/works/custom-field-values/${id}/`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(value),
+      }
+    );
+  }
+
+  async deleteCustomFieldValue(id: number | string): Promise<void> {
+    return this.request<void>(`/api/v1/works/custom-field-values/${id}/`, {
+      method: "DELETE",
+    });
+  }
+
+  // Custom Groups API
+  async getCustomGroups(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+  }): Promise<{ results: CustomGroup[] }> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append("page", params.page.toString());
+    if (params?.page_size) queryParams.append("page_size", params.page_size.toString());
+    if (params?.search) queryParams.append("search", params.search);
+    const queryString = queryParams.toString();
+    return this.request<{ results: CustomGroup[] }>(
+      `/api/v1/works/custom-groups/${queryString ? `?${queryString}` : ""}`
+    );
+  }
+
+  async getCustomGroup(id: number | string): Promise<CustomGroup> {
+    return this.request<CustomGroup>(`/api/v1/works/custom-groups/${id}/`);
+  }
+
+  async createCustomGroup(group: Partial<CustomGroup>): Promise<CustomGroup> {
+    return this.request<CustomGroup>("/api/v1/works/custom-groups/", {
+      method: "POST",
+      body: JSON.stringify(group),
+    });
+  }
+
+  async updateCustomGroup(
+    id: number | string,
+    group: Partial<CustomGroup>
+  ): Promise<CustomGroup> {
+    return this.request<CustomGroup>(`/api/v1/works/custom-groups/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(group),
+    });
+  }
+
+  async deleteCustomGroup(id: number | string): Promise<void> {
+    return this.request<void>(`/api/v1/works/custom-groups/${id}/`, {
+      method: "DELETE",
+    });
+  }
+
+  async getCustomGroupsBoardData(): Promise<Record<number, {
+    group: CustomGroup;
+    tasks: WorkTask[];
+    count: number;
+  }>> {
+    return this.request<Record<number, {
+      group: CustomGroup;
+      tasks: WorkTask[];
+      count: number;
+    }>>("/api/v1/works/custom-groups/board_data/");
+  }
+
+  // View Preferences API
+  async getViewPreferences(params?: {
+    user_id?: number;
+    view_type?: string;
+  }): Promise<{ results: ViewPreference[] }> {
+    const queryParams = new URLSearchParams();
+    if (params?.user_id) queryParams.append("user_id", params.user_id.toString());
+    if (params?.view_type) queryParams.append("view_type", params.view_type);
+    const queryString = queryParams.toString();
+    return this.request<{ results: ViewPreference[] }>(
+      `/api/v1/works/view-preferences/${queryString ? `?${queryString}` : ""}`
+    );
+  }
+
+  async getViewPreference(id: number | string): Promise<ViewPreference> {
+    return this.request<ViewPreference>(`/api/v1/works/view-preferences/${id}/`);
+  }
+
+  async createViewPreference(
+    preference: Partial<ViewPreference>
+  ): Promise<ViewPreference> {
+    return this.request<ViewPreference>("/api/v1/works/view-preferences/", {
+      method: "POST",
+      body: JSON.stringify(preference),
+    });
+  }
+
+  async updateViewPreference(
+    id: number | string,
+    preference: Partial<ViewPreference>
+  ): Promise<ViewPreference> {
+    return this.request<ViewPreference>(
+      `/api/v1/works/view-preferences/${id}/`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(preference),
+      }
+    );
+  }
+
+  async deleteViewPreference(id: number | string): Promise<void> {
+    return this.request<void>(`/api/v1/works/view-preferences/${id}/`, {
       method: "DELETE",
     });
   }
@@ -856,17 +1175,24 @@ class ApiClient {
     );
   }
 
-  async getPersonalWorkTaskStatistics(userId?: number, params?: {
-    month?: number;
-    year?: number;
-  }): Promise<PersonalWorkTaskStatistics> {
+  async getPersonalWorkTaskStatistics(
+    userId?: number,
+    params?: {
+      month?: number;
+      year?: number;
+    }
+  ): Promise<PersonalWorkTaskStatistics> {
     const queryParams = new URLSearchParams();
     if (params?.month) queryParams.append("month", params.month.toString());
     if (params?.year) queryParams.append("year", params.year.toString());
     const queryString = queryParams.toString();
-    const url = userId 
-      ? `/api/v1/works/tasks/statistics/personal/${userId}/${queryString ? `?${queryString}` : ""}`
-      : `/api/v1/works/tasks/statistics/personal/${queryString ? `?${queryString}` : ""}`;
+    const url = userId
+      ? `/api/v1/works/tasks/statistics/personal/${userId}/${
+          queryString ? `?${queryString}` : ""
+        }`
+      : `/api/v1/works/tasks/statistics/personal/${
+          queryString ? `?${queryString}` : ""
+        }`;
     return this.request<PersonalWorkTaskStatistics>(url);
   }
 
@@ -881,7 +1207,12 @@ class ApiClient {
     date_to?: string;
     recipient_id?: number;
     search?: string;
-  }): Promise<{ count: number; next: string | null; previous: string | null; results: Payment[] }> {
+  }): Promise<{
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: Payment[];
+  }> {
     const queryParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -891,9 +1222,12 @@ class ApiClient {
       });
     }
     const queryString = queryParams.toString();
-    return this.request<{ count: number; next: string | null; previous: string | null; results: Payment[] }>(
-      `/api/v1/payments/${queryString ? `?${queryString}` : ""}`
-    );
+    return this.request<{
+      count: number;
+      next: string | null;
+      previous: string | null;
+      results: Payment[];
+    }>(`/api/v1/payments/${queryString ? `?${queryString}` : ""}`);
   }
 
   async getPayment(id: number | string): Promise<Payment> {
@@ -907,7 +1241,10 @@ class ApiClient {
     });
   }
 
-  async updatePayment(id: number | string, payment: Partial<Payment>): Promise<Payment> {
+  async updatePayment(
+    id: number | string,
+    payment: Partial<Payment>
+  ): Promise<Payment> {
     return this.request<Payment>(`/api/v1/payments/${id}/`, {
       method: "PATCH",
       body: JSON.stringify(payment),
@@ -920,7 +1257,11 @@ class ApiClient {
     });
   }
 
-  async approvePayment(id: number | string, action: 'approve' | 'reject', rejection_reason?: string): Promise<Payment> {
+  async approvePayment(
+    id: number | string,
+    action: "approve" | "reject",
+    rejection_reason?: string
+  ): Promise<Payment> {
     return this.request<Payment>(`/api/v1/payments/${id}/approve/`, {
       method: "POST",
       body: JSON.stringify({ action, rejection_reason }),
@@ -933,7 +1274,9 @@ class ApiClient {
     });
   }
 
-  async getPaymentSummary(params?: { work_group?: string }): Promise<PaymentSummary> {
+  async getPaymentSummary(params?: {
+    work_group?: string;
+  }): Promise<PaymentSummary> {
     const queryParams = new URLSearchParams();
     if (params?.work_group) queryParams.append("work_group", params.work_group);
     const queryString = queryParams.toString();
@@ -942,13 +1285,20 @@ class ApiClient {
     );
   }
 
-  async getPaymentCategories(params?: { work_group?: string }): Promise<PaymentCategoryConfig[]> {
+  async getPaymentCategories(params?: {
+    work_group?: string;
+  }): Promise<PaymentCategoryConfig[]> {
     const queryParams = new URLSearchParams();
     if (params?.work_group) queryParams.append("work_group", params.work_group);
     const queryString = queryParams.toString();
-    return this.request<PaymentCategoryConfig[]>(
-      `/api/v1/payments/categories/${queryString ? `?${queryString}` : ""}`
-    );
+    const response = await this.request<
+      PaymentCategoryConfig[] | { results: PaymentCategoryConfig[] }
+    >(`/api/v1/payments/categories/${queryString ? `?${queryString}` : ""}`);
+    // Handle paginated response format
+    if (Array.isArray(response)) {
+      return response;
+    }
+    return (response as any).results || [];
   }
 }
 
@@ -1106,6 +1456,67 @@ export interface WorkTask {
   is_active: boolean;
   is_overdue?: boolean;
   is_on_time?: boolean;
+  custom_field_values?: Record<number, {
+    field_id: number;
+    field_name: string;
+    field_type: string;
+    value: any;
+  }>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomField {
+  id: number;
+  name: string;
+  field_type: 'text' | 'textarea' | 'number' | 'date' | 'dropdown' | 'checkbox' | 'money' | 'website' | 'email' | 'phone' | 'labels' | 'formula';
+  description?: string;
+  options?: string[];
+  is_required: boolean;
+  is_visible: boolean;
+  order: number;
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomFieldValue {
+  id: number;
+  task: number;
+  field: number;
+  field_name?: string;
+  field_type?: string;
+  value_text?: string;
+  value_number?: number;
+  value_date?: string;
+  value_boolean?: boolean;
+  value_json?: any;
+  value?: any;
+  updated_at: string;
+}
+
+export interface CustomGroup {
+  id: number;
+  name: string;
+  color: string;
+  order: number;
+  is_default: boolean;
+  is_active: boolean;
+  status_mapping?: string[];
+  created_by?: number;
+  created_by_name?: string;
+  task_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ViewPreference {
+  id: number;
+  user: number;
+  view_type: 'list' | 'board' | 'calendar' | 'gantt';
+  config: Record<string, any>;
+  is_default: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -1288,4 +1699,3 @@ export interface PaymentSummary {
 }
 
 export const apiClient = new ApiClient();
-

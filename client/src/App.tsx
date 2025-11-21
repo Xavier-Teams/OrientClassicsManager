@@ -28,6 +28,7 @@ import WorkReports from "@/pages/work-reports";
 import WorkReportsPersonal from "@/pages/work-reports-personal";
 import WorkPlan from "@/pages/work-plan";
 import WorkTasks from "@/pages/work-tasks";
+import WorkTasksModern from "@/pages/work-tasks-modern";
 import { canManageUsers, canManageTranslators, canAccessWorkReports } from "@/lib/permissions";
 
 // Component to protect routes that require authentication
@@ -110,7 +111,8 @@ function Router() {
                 </Route>
                 <Route path="/work-reports/personal" component={WorkReportsPersonal} />
                 <Route path="/work-plan" component={WorkPlan} />
-                <Route path="/work-tasks" component={WorkTasks} />
+                <Route path="/work-tasks" component={WorkTasksModern} />
+                <Route path="/work-tasks-old" component={WorkTasks} />
                 <Route component={NotFound} />
               </Switch>
             </AppLayout>

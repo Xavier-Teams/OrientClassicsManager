@@ -6,13 +6,21 @@ from .views import (
     StageViewSet,
     WorkTaskViewSet,
     WorkTaskStatisticsView,
-    WorkTaskPersonalStatisticsView
+    WorkTaskPersonalStatisticsView,
+    CustomFieldViewSet,
+    CustomFieldValueViewSet,
+    CustomGroupViewSet,
+    ViewPreferenceViewSet
 )
 
 router = DefaultRouter()
 router.register(r'parts', TranslationPartViewSet, basename='part')
 router.register(r'stages', StageViewSet, basename='stage')
 router.register(r'tasks', WorkTaskViewSet, basename='task')
+router.register(r'custom-fields', CustomFieldViewSet, basename='custom-field')
+router.register(r'custom-field-values', CustomFieldValueViewSet, basename='custom-field-value')
+router.register(r'custom-groups', CustomGroupViewSet, basename='custom-group')
+router.register(r'view-preferences', ViewPreferenceViewSet, basename='view-preference')
 router.register(r'', TranslationWorkViewSet, basename='work')
 
 urlpatterns = [

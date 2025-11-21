@@ -26,6 +26,7 @@ class PaymentCategoryConfigViewSet(viewsets.ReadOnlyModelViewSet):
     search_fields = ['category_name', 'category_code', 'description']
     ordering_fields = ['work_group', 'category_code', 'category_name']
     ordering = ['work_group', 'category_code']
+    pagination_class = None  # Disable pagination for categories
     
     def get_queryset(self):
         queryset = super().get_queryset()

@@ -7,13 +7,20 @@ from django.db.models import Count, Q, Avg, Sum, Case, When, IntegerField
 from django.db import models
 from django.utils import timezone
 from datetime import datetime, timedelta
-from .models import TranslationWork, TranslationPart, Stage, WorkTask
+from .models import (
+    TranslationWork, TranslationPart, Stage, WorkTask,
+    CustomField, CustomFieldValue, CustomGroup, ViewPreference
+)
 from .serializers import (
     TranslationWorkSerializer,
     TranslationPartSerializer,
     TranslationPartDetailSerializer,
     StageSerializer,
-    WorkTaskSerializer
+    WorkTaskSerializer,
+    CustomFieldSerializer,
+    CustomFieldValueSerializer,
+    CustomGroupSerializer,
+    ViewPreferenceSerializer
 )
 from .permissions import WorkPermission, WorkReportPermission
 
@@ -535,3 +542,130 @@ class WorkTaskPersonalStatisticsView(APIView):
             'status_breakdown': status_breakdown,
             'group_breakdown': group_breakdown,
         })
+
+
+class CustomFieldViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Custom Field management
+    """
+    queryset = CustomField.objects.all()
+    serializer_class = CustomFieldSerializer
+    permission_classes = [AllowAny]  # TODO: Change to [IsAuthenticated] in production
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'description']
+    ordering_fields = ['order', 'name', 'created_at']
+    ordering = ['order', 'name']
+    
+    def perform_create(self, serializer):
+        """Set created_by when creating a custom field"""
+        if self.request.user and self.request.user.is_authenticated:
+            serializer.save(created_by=self.request.user)
+        else:
+            serializer.save()
+
+
+class CustomFieldValueViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Custom Field Value management
+    """
+    queryset = CustomFieldValue.objects.all()
+    serializer_class = CustomFieldValueSerializer
+    permission_classes = [AllowAny]  # TODO: Change to [IsAuthenticated] in production
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filter by task
+        task_id = self.request.query_params.get('task_id', None)
+        if task_id:
+            queryset = queryset.filter(task_id=task_id)
+        
+        # Filter by field
+        field_id = self.request.query_params.get('field_id', None)
+        if field_id:
+            queryset = queryset.filter(field_id=field_id)
+        
+        return queryset
+
+
+class CustomGroupViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Custom Group management (for Kanban Board)
+    """
+    queryset = CustomGroup.objects.filter(is_active=True)
+    serializer_class = CustomGroupSerializer
+    permission_classes = [AllowAny]  # TODO: Change to [IsAuthenticated] in production
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name']
+    ordering_fields = ['order', 'name']
+    ordering = ['order', 'name']
+    
+    def perform_create(self, serializer):
+        """Set created_by when creating a custom group"""
+        if self.request.user and self.request.user.is_authenticated:
+            serializer.save(created_by=self.request.user)
+        else:
+            serializer.save()
+    
+    @action(detail=False, methods=['get'])
+    def board_data(self, request):
+        """Get tasks organized by custom groups for board view"""
+        from .models import WorkTask
+        
+        groups = self.get_queryset()
+        board_data = {}
+        
+        for group in groups:
+            if group.status_mapping:
+                tasks = WorkTask.objects.filter(
+                    is_active=True,
+                    status__in=group.status_mapping
+                )
+            else:
+                # If no status mapping, show all tasks
+                tasks = WorkTask.objects.filter(is_active=True)
+            
+            serializer = WorkTaskSerializer(tasks, many=True)
+            board_data[group.id] = {
+                'group': CustomGroupSerializer(group).data,
+                'tasks': serializer.data,
+                'count': tasks.count()
+            }
+        
+        return Response(board_data)
+
+
+class ViewPreferenceViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for View Preference management
+    """
+    queryset = ViewPreference.objects.all()
+    serializer_class = ViewPreferenceSerializer
+    permission_classes = [AllowAny]  # TODO: Change to [IsAuthenticated] in production
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['view_type', 'is_default']
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filter by user
+        user_id = self.request.query_params.get('user_id', None)
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+        elif self.request.user and self.request.user.is_authenticated:
+            queryset = queryset.filter(user=self.request.user)
+        
+        # Filter by view_type
+        view_type = self.request.query_params.get('view_type', None)
+        if view_type:
+            queryset = queryset.filter(view_type=view_type)
+        
+        return queryset
+    
+    def perform_create(self, serializer):
+        """Set user when creating a view preference"""
+        if self.request.user and self.request.user.is_authenticated:
+            serializer.save(user=self.request.user)
+        else:
+            serializer.save()
