@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DateInput } from "@/components/ui/date-input";
 import { apiClient, WorkTask } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -52,8 +53,6 @@ const STATUS_CHOICES = [
   { value: "dang_tien_hanh", label: "Đang tiến hành" },
   { value: "hoan_thanh", label: "Hoàn thành" },
   { value: "khong_hoan_thanh", label: "Không hoàn thành" },
-  { value: "cham_tien_do", label: "Chậm tiến độ" },
-  { value: "hoan_thanh_truoc_han", label: "Hoàn thành trước hạn" },
   { value: "da_huy", label: "Đã hủy" },
   { value: "tam_hoan", label: "Tạm hoãn" },
 ];
@@ -82,6 +81,7 @@ export default function WorkTaskForm({
     status: "chua_bat_dau",
     start_date: "",
     due_date: "",
+    completed_date: "",
     progress_percent: 0,
     notes: "",
     assigned_to: user?.id || undefined,
@@ -98,6 +98,7 @@ export default function WorkTaskForm({
         status: task.status || "chua_bat_dau",
         start_date: task.start_date || "",
         due_date: task.due_date || "",
+        completed_date: task.completed_date || "",
         progress_percent: task.progress_percent || 0,
         notes: task.notes || "",
         assigned_to: task.assigned_to || user?.id || undefined,
@@ -112,6 +113,7 @@ export default function WorkTaskForm({
         status: defaultStatus || "chua_bat_dau",
         start_date: "",
         due_date: "",
+        completed_date: "",
         progress_percent: 0,
         notes: "",
         assigned_to: user?.id || undefined,
@@ -209,6 +211,7 @@ export default function WorkTaskForm({
       progress_percent: parseInt(formData.progress_percent.toString()),
       start_date: formData.start_date || undefined,
       due_date: formData.due_date || undefined,
+      completed_date: formData.completed_date || undefined,
     };
 
     if (task) {
@@ -346,27 +349,45 @@ export default function WorkTaskForm({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor="start_date">Ngày bắt đầu</Label>
-          <Input
+          <DateInput
             id="start_date"
-            type="date"
             value={formData.start_date}
-            onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+            onChange={(value) => setFormData({ ...formData, start_date: value })}
+            placeholder="dd/mm/yyyy"
           />
         </div>
 
         <div>
           <Label htmlFor="due_date">Hạn hoàn thành</Label>
-          <Input
+          <DateInput
             id="due_date"
-            type="date"
             value={formData.due_date}
-            onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+            onChange={(value) => setFormData({ ...formData, due_date: value })}
+            placeholder="dd/mm/yyyy"
             className={errors.due_date ? "border-red-500" : ""}
           />
           {errors.due_date && (
             <p className="text-sm text-red-500 mt-1">{errors.due_date}</p>
           )}
         </div>
+      </div>
+
+      <div>
+        <Label htmlFor="completed_date">Ngày hoàn thành</Label>
+        <DateInput
+          id="completed_date"
+          value={formData.completed_date}
+          onChange={(value) => {
+            setFormData({
+              ...formData,
+              completed_date: value,
+              // Tự động chuyển trạng thái sang "hoàn thành" khi có ngày hoàn thành
+              // Khi xóa ngày hoàn thành, reset trạng thái về "Đang tiến hành"
+              status: value ? "hoan_thanh" : "dang_tien_hanh",
+            });
+          }}
+          placeholder="dd/mm/yyyy"
+        />
       </div>
 
       <div>

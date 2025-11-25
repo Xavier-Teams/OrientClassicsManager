@@ -1,20 +1,23 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { apiClient, PersonalWorkTaskStatistics } from "@/lib/api";
-import { 
-  Clock, 
-  CheckCircle2, 
+import { apiClient, WorkTask } from "@/lib/api";
+import {
+  Clock,
+  CheckCircle2,
   XCircle,
   AlertTriangle,
   FolderKanban,
-  User
 } from "lucide-react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer } from "recharts";
 
 const WORK_GROUP_LABELS: Record<string, string> = {
   chung: "Công việc chung",
@@ -28,37 +31,199 @@ const WORK_GROUP_LABELS: Record<string, string> = {
   hop_thuong_truc: "Họp thường trực",
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  chua_bat_dau: "Chưa bắt đầu",
-  dang_tien_hanh: "Đang tiến hành",
-  hoan_thanh: "Hoàn thành",
-  khong_hoan_thanh: "Không hoàn thành",
-  cham_tien_do: "Chậm tiến độ",
-  hoan_thanh_truoc_han: "Hoàn thành trước hạn",
-  da_huy: "Đã hủy",
-  tam_hoan: "Tạm hoãn",
-};
-
-const FREQUENCY_LABELS: Record<string, string> = {
-  hang_ngay: "Hằng ngày",
-  hang_tuan: "Hằng tuần",
-  hang_thang: "Hằng tháng",
-  dot_xuat: "Đột xuất",
-};
-
 export default function WorkReportsPersonal() {
   const { user } = useAuth();
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
-  const { data: statistics, isLoading, error } = useQuery<PersonalWorkTaskStatistics>({
-    queryKey: ["personal-work-task-statistics", user?.id, selectedMonth, selectedYear],
-    queryFn: () => apiClient.getPersonalWorkTaskStatistics(user?.id, { 
-      month: selectedMonth, 
-      year: selectedYear 
+  // Fetch work tasks for the current user
+  const { data: tasksData, isLoading, error } = useQuery({
+    queryKey: ["work-tasks-reports-personal", user?.id, selectedMonth, selectedYear],
+    queryFn: () => apiClient.getWorkTasks({ 
+      page_size: 1000,
+      assigned_to: user?.id 
     }),
     enabled: !!user?.id,
   });
+
+  const tasks = tasksData?.results || [];
+
+  // Filter tasks by month/year
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      if (!task.start_date) return false;
+      const taskDate = new Date(task.start_date);
+      return (
+        taskDate.getMonth() + 1 === selectedMonth &&
+        taskDate.getFullYear() === selectedYear
+      );
+    });
+  }, [tasks, selectedMonth, selectedYear]);
+
+  // BC 1: TỔNG QUÁT calculations
+  const bc1Data = useMemo(() => {
+    const total = filteredTasks.length;
+    const completed = filteredTasks.filter((t) => t.status === "hoan_thanh").length;
+    const inProgress = filteredTasks.filter((t) => t.status === "dang_tien_hanh").length;
+    const notCompleted = filteredTasks.filter(
+      (t) => t.status !== "hoan_thanh" && t.status !== "da_huy"
+    ).length;
+    
+    // Chậm tiến độ (chưa hoàn thành): có due_date đã qua và chưa hoàn thành
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const behindSchedule = filteredTasks.filter((t) => {
+      if (t.status === "hoan_thanh" || t.status === "da_huy") return false;
+      if (!t.due_date) return false;
+      const dueDate = new Date(t.due_date);
+      dueDate.setHours(0, 0, 0, 0);
+      return dueDate < today;
+    }).length;
+
+    return {
+      total,
+      completed,
+      inProgress,
+      notCompleted,
+      behindSchedule,
+    };
+  }, [filteredTasks]);
+
+  // BC 2: NHÓM CÔNG VIỆC CHƯA HOÀN THÀNH calculations
+  const bc2Data = useMemo(() => {
+    const incompleteTasks = filteredTasks.filter(
+      (t) => t.status !== "hoan_thanh" && t.status !== "da_huy"
+    );
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const onTime: Record<string, number> = {};
+    const overdue: Record<string, number> = {};
+
+    incompleteTasks.forEach((task) => {
+      const group = task.work_group || "unknown";
+      const groupName = WORK_GROUP_LABELS[group] || group;
+
+      if (!task.due_date) {
+        onTime[groupName] = (onTime[groupName] || 0) + 1;
+        return;
+      }
+
+      const dueDate = new Date(task.due_date);
+      dueDate.setHours(0, 0, 0, 0);
+
+      if (dueDate >= today) {
+        onTime[groupName] = (onTime[groupName] || 0) + 1;
+      } else {
+        overdue[groupName] = (overdue[groupName] || 0) + 1;
+      }
+    });
+
+    return { onTime, overdue };
+  }, [filteredTasks]);
+
+  // BC 3: NHÓM CÔNG VIỆC ĐÃ HOÀN THÀNH calculations
+  const bc3Data = useMemo(() => {
+    const completedTasks = filteredTasks.filter((t) => t.status === "hoan_thanh");
+
+    const onTime: Record<string, number> = {};
+    const early: Record<string, number> = {};
+    const late: Record<string, number> = {};
+
+    completedTasks.forEach((task) => {
+      if (!task.completed_date || !task.due_date) return;
+
+      const group = task.work_group || "unknown";
+      const groupName = WORK_GROUP_LABELS[group] || group;
+
+      const completedDate = new Date(task.completed_date);
+      const dueDate = new Date(task.due_date);
+      completedDate.setHours(0, 0, 0, 0);
+      dueDate.setHours(0, 0, 0, 0);
+
+      const diffTime = completedDate.getTime() - dueDate.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays === 0) {
+        onTime[groupName] = (onTime[groupName] || 0) + 1;
+      } else if (diffDays < 0) {
+        early[groupName] = (early[groupName] || 0) + 1;
+      } else {
+        late[groupName] = (late[groupName] || 0) + 1;
+      }
+    });
+
+    return { onTime, early, late };
+  }, [filteredTasks]);
+
+  // Prepare chart data
+  const bc1ChartData = [
+    { name: "Tổng số", value: bc1Data.total, color: "#8884d8" },
+    { name: "Hoàn thành", value: bc1Data.completed, color: "#10b981" },
+    { name: "Đang tiến hành", value: bc1Data.inProgress, color: "#3b82f6" },
+    { name: "Chưa hoàn thành", value: bc1Data.notCompleted, color: "#ef4444" },
+    { name: "Chậm tiến độ", value: bc1Data.behindSchedule, color: "#f97316" },
+  ].filter((item) => item.value > 0);
+
+  const bc2ChartData = useMemo(() => {
+    const allGroups = new Set([
+      ...Object.keys(bc2Data.onTime),
+      ...Object.keys(bc2Data.overdue),
+    ]);
+
+    return Array.from(allGroups).map((group) => ({
+      name: group,
+      "Còn hạn": bc2Data.onTime[group] || 0,
+      "Quá hạn": bc2Data.overdue[group] || 0,
+    }));
+  }, [bc2Data]);
+
+  const bc3ChartData = useMemo(() => {
+    const allGroups = new Set([
+      ...Object.keys(bc3Data.onTime),
+      ...Object.keys(bc3Data.early),
+      ...Object.keys(bc3Data.late),
+    ]);
+
+    return Array.from(allGroups).map((group) => ({
+      name: group,
+      "Đúng tiến độ": bc3Data.onTime[group] || 0,
+      "Trước hạn": bc3Data.early[group] || 0,
+      "Chậm tiến độ": bc3Data.late[group] || 0,
+    }));
+  }, [bc3Data]);
+
+  const bc2PieData = [
+    {
+      name: "Còn hạn",
+      value: Object.values(bc2Data.onTime).reduce((a, b) => a + b, 0),
+      color: "#3b82f6",
+    },
+    {
+      name: "Quá hạn",
+      value: Object.values(bc2Data.overdue).reduce((a, b) => a + b, 0),
+      color: "#ef4444",
+    },
+  ].filter((item) => item.value > 0);
+
+  const bc3PieData = [
+    {
+      name: "Đúng tiến độ",
+      value: Object.values(bc3Data.onTime).reduce((a, b) => a + b, 0),
+      color: "#3b82f6",
+    },
+    {
+      name: "Trước hạn",
+      value: Object.values(bc3Data.early).reduce((a, b) => a + b, 0),
+      color: "#10b981",
+    },
+    {
+      name: "Chậm tiến độ",
+      value: Object.values(bc3Data.late).reduce((a, b) => a + b, 0),
+      color: "#f97316",
+    },
+  ].filter((item) => item.value > 0);
 
   const currentDate = new Date();
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -78,10 +243,6 @@ export default function WorkReportsPersonal() {
         <div className="text-destructive">Lỗi khi tải dữ liệu: {String(error)}</div>
       </div>
     );
-  }
-
-  if (!statistics) {
-    return null;
   }
 
   return (
@@ -127,199 +288,312 @@ export default function WorkReportsPersonal() {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tổng công việc</CardTitle>
-            <FolderKanban className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{statistics.total_tasks}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Tháng {selectedMonth}/{selectedYear}
-            </p>
-          </CardContent>
-        </Card>
+      {/* BC 1: TỔNG QUÁT */}
+      <Card>
+        <CardHeader>
+          <CardTitle>BC 1: TỔNG QUÁT</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Tổng số công việc</CardTitle>
+                <FolderKanban className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{bc1Data.total}</div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Hoàn thành</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{statistics.summary.completed}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {statistics.total_tasks > 0 
-                ? `${Math.round((statistics.summary.completed / statistics.total_tasks) * 100)}% tổng số`
-                : "0% tổng số"}
-            </p>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Hoàn thành</CardTitle>
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">{bc1Data.completed}</div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Đang tiến hành</CardTitle>
-            <Clock className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{statistics.summary.in_progress}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {statistics.total_tasks > 0 
-                ? `${Math.round((statistics.summary.in_progress / statistics.total_tasks) * 100)}% tổng số`
-                : "0% tổng số"}
-            </p>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Đang tiến hành</CardTitle>
+                <Clock className="h-4 w-4 text-blue-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600">{bc1Data.inProgress}</div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Chậm tiến độ</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-orange-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">
-              {statistics.status_breakdown.cham_tien_do}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Cần theo dõi
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Chưa hoàn thành</CardTitle>
+                <XCircle className="h-4 w-4 text-red-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-red-600">{bc1Data.notCompleted}</div>
+              </CardContent>
+            </Card>
 
-      <Tabs defaultValue="by-group" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="by-group">Theo nhóm công việc</TabsTrigger>
-          <TabsTrigger value="by-status">Theo trạng thái</TabsTrigger>
-          <TabsTrigger value="by-frequency">Theo tần suất</TabsTrigger>
-        </TabsList>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Chậm tiến độ</CardTitle>
+                <AlertTriangle className="h-4 w-4 text-orange-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-orange-600">{bc1Data.behindSchedule}</div>
+                <p className="text-xs text-muted-foreground mt-1">Chưa hoàn thành</p>
+              </CardContent>
+            </Card>
+          </div>
 
-        <TabsContent value="by-group" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Thống kê theo nhóm công việc</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nhóm công việc</TableHead>
-                    <TableHead className="text-right">Tổng số</TableHead>
-                    <TableHead className="text-right">Hoàn thành</TableHead>
-                    <TableHead className="text-right">Đang tiến hành</TableHead>
-                    <TableHead className="text-right">Chậm tiến độ</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {Object.entries(statistics.group_breakdown)
-                    .filter(([_, data]) => data.total > 0)
-                    .map(([key, data]) => (
-                      <TableRow key={key}>
-                        <TableCell className="font-medium">{data.name}</TableCell>
-                        <TableCell className="text-right">{data.total}</TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant="outline" className="bg-green-50 text-green-700">
-                            {data.completed}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                            {data.in_progress}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant="outline" className="bg-orange-50 text-orange-700">
-                            {data.behind_schedule}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  {Object.values(statistics.group_breakdown).every((d) => d.total === 0) && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        Chưa có công việc nào được giao
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+          {bc1ChartData.length > 0 && (
+            <ChartContainer
+              config={{
+                total: { label: "Tổng số", color: "#8884d8" },
+                completed: { label: "Hoàn thành", color: "#10b981" },
+                inProgress: { label: "Đang tiến hành", color: "#3b82f6" },
+                notCompleted: { label: "Chưa hoàn thành", color: "#ef4444" },
+                behindSchedule: { label: "Chậm tiến độ", color: "#f97316" },
+              }}
+              className="h-[300px]"
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={bc1ChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar dataKey="value" fill="#8884d8" />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartContainer>
+          )}
+        </CardContent>
+      </Card>
 
-        <TabsContent value="by-status" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Thống kê theo trạng thái</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                {Object.entries(STATUS_LABELS).map(([key, label]) => {
-                  const count = statistics.status_breakdown[key as keyof typeof statistics.status_breakdown] || 0;
-                  return (
-                    <Card key={key}>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium">{label}</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold">{count}</div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {statistics.total_tasks > 0 
-                            ? `${Math.round((count / statistics.total_tasks) * 100)}% tổng số`
-                            : "0%"}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+      {/* BC 2: NHÓM CÔNG VIỆC CHƯA HOÀN THÀNH */}
+      <Card>
+        <CardHeader>
+          <CardTitle>BC 2: NHÓM CÔNG VIỆC CHƯA HOÀN THÀNH</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <h3 className="text-sm font-medium mb-4">Còn hạn</h3>
+              <div className="space-y-2">
+                {Object.entries(bc2Data.onTime).map(([group, count]) => (
+                  <div key={group} className="flex items-center justify-between p-2 rounded border">
+                    <span className="text-sm">{group}</span>
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                      {count}
+                    </Badge>
+                  </div>
+                ))}
+                {Object.keys(bc2Data.onTime).length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Không có công việc nào còn hạn
+                  </p>
+                )}
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </div>
+            <div>
+              <h3 className="text-sm font-medium mb-4">Quá hạn</h3>
+              <div className="space-y-2">
+                {Object.entries(bc2Data.overdue).map(([group, count]) => (
+                  <div key={group} className="flex items-center justify-between p-2 rounded border">
+                    <span className="text-sm">{group}</span>
+                    <Badge variant="outline" className="bg-red-50 text-red-700">
+                      {count}
+                    </Badge>
+                  </div>
+                ))}
+                {Object.keys(bc2Data.overdue).length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Không có công việc nào quá hạn
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
 
-        <TabsContent value="by-frequency" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Thống kê theo tần suất</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Tần suất</TableHead>
-                    <TableHead className="text-right">Số lượng</TableHead>
-                    <TableHead className="text-right">Tỷ lệ</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {statistics.by_frequency.map((item) => (
-                    <TableRow key={item.frequency}>
-                      <TableCell className="font-medium">
-                        {FREQUENCY_LABELS[item.frequency] || item.frequency}
-                      </TableCell>
-                      <TableCell className="text-right">{item.count}</TableCell>
-                      <TableCell className="text-right">
-                        {statistics.total_tasks > 0 
-                          ? `${Math.round((item.count / statistics.total_tasks) * 100)}%`
-                          : "0%"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {statistics.by_frequency.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
-                        Chưa có dữ liệu
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          {bc2ChartData.length > 0 && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <ChartContainer
+                config={{
+                  "Còn hạn": { label: "Còn hạn", color: "#3b82f6" },
+                  "Quá hạn": { label: "Quá hạn", color: "#ef4444" },
+                }}
+                className="h-[300px]"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={bc2ChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Legend />
+                    <Bar dataKey="Còn hạn" fill="#3b82f6" />
+                    <Bar dataKey="Quá hạn" fill="#ef4444" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartContainer>
+
+              {bc2PieData.length > 0 && (
+                <ChartContainer
+                  config={{
+                    "Còn hạn": { label: "Còn hạn", color: "#3b82f6" },
+                    "Quá hạn": { label: "Quá hạn", color: "#ef4444" },
+                  }}
+                  className="h-[300px]"
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={bc2PieData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {bc2PieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* BC 3: NHÓM CÔNG VIỆC ĐÃ HOÀN THÀNH */}
+      <Card>
+        <CardHeader>
+          <CardTitle>BC 3: NHÓM CÔNG VIỆC ĐÃ HOÀN THÀNH</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <h3 className="text-sm font-medium mb-4">Đúng tiến độ</h3>
+              <div className="space-y-2">
+                {Object.entries(bc3Data.onTime).map(([group, count]) => (
+                  <div key={group} className="flex items-center justify-between p-2 rounded border">
+                    <span className="text-sm">{group}</span>
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                      {count}
+                    </Badge>
+                  </div>
+                ))}
+                {Object.keys(bc3Data.onTime).length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Không có công việc nào
+                  </p>
+                )}
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-medium mb-4">Hoàn thành trước hạn</h3>
+              <div className="space-y-2">
+                {Object.entries(bc3Data.early).map(([group, count]) => (
+                  <div key={group} className="flex items-center justify-between p-2 rounded border">
+                    <span className="text-sm">{group}</span>
+                    <Badge variant="outline" className="bg-green-50 text-green-700">
+                      {count}
+                    </Badge>
+                  </div>
+                ))}
+                {Object.keys(bc3Data.early).length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Không có công việc nào
+                  </p>
+                )}
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-medium mb-4">Hoàn thành chậm tiến độ</h3>
+              <div className="space-y-2">
+                {Object.entries(bc3Data.late).map(([group, count]) => (
+                  <div key={group} className="flex items-center justify-between p-2 rounded border">
+                    <span className="text-sm">{group}</span>
+                    <Badge variant="outline" className="bg-orange-50 text-orange-700">
+                      {count}
+                    </Badge>
+                  </div>
+                ))}
+                {Object.keys(bc3Data.late).length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Không có công việc nào
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {bc3ChartData.length > 0 && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <ChartContainer
+                config={{
+                  "Đúng tiến độ": { label: "Đúng tiến độ", color: "#3b82f6" },
+                  "Trước hạn": { label: "Trước hạn", color: "#10b981" },
+                  "Chậm tiến độ": { label: "Chậm tiến độ", color: "#f97316" },
+                }}
+                className="h-[300px]"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={bc3ChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Legend />
+                    <Bar dataKey="Đúng tiến độ" fill="#3b82f6" />
+                    <Bar dataKey="Trước hạn" fill="#10b981" />
+                    <Bar dataKey="Chậm tiến độ" fill="#f97316" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartContainer>
+
+              {bc3PieData.length > 0 && (
+                <ChartContainer
+                  config={{
+                    "Đúng tiến độ": { label: "Đúng tiến độ", color: "#3b82f6" },
+                    "Trước hạn": { label: "Trước hạn", color: "#10b981" },
+                    "Chậm tiến độ": { label: "Chậm tiến độ", color: "#f97316" },
+                  }}
+                  className="h-[300px]"
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={bc3PieData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {bc3PieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
-
