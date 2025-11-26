@@ -254,11 +254,82 @@ export default function ListView({
     }));
   };
 
+  const validateInlineEdit = (task: WorkTask, changes: Partial<WorkTask>): { error: string | null; warning: string | null } => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Merge current task data with changes
+    const mergedData = { ...task, ...changes };
+
+    // Validation 1: Hạn hoàn thành >= Ngày bắt đầu
+    if (mergedData.due_date && mergedData.start_date) {
+      if (new Date(mergedData.due_date) < new Date(mergedData.start_date)) {
+        return {
+          error: "🚫 CẢNH BÁO: Hạn hoàn thành không thể sớm hơn ngày bắt đầu công việc!",
+          warning: null
+        };
+      }
+    }
+
+    // Validation 2: Ngày hoàn thành không được trong tương lai (chống gian lận)
+    if (mergedData.completed_date) {
+      const completedDate = new Date(mergedData.completed_date);
+      completedDate.setHours(0, 0, 0, 0);
+      if (completedDate > today) {
+        return {
+          error: "🚫 GIAN LẬN PHÁT HIỆN!\n\nKhông thể hoàn thành công việc trong tương lai!\nHệ thống chỉ cho phép nhập ngày hôm nay hoặc trước đó để đảm bảo tính chính xác.",
+          warning: null
+        };
+      }
+    }
+
+    // Validation 3: Ngày hoàn thành >= Ngày bắt đầu
+    if (mergedData.completed_date && mergedData.start_date) {
+      if (new Date(mergedData.completed_date) < new Date(mergedData.start_date)) {
+        return {
+          error: "🚫 LỖI LOGIC: Không thể hoàn thành công việc trước khi bắt đầu!",
+          warning: null
+        };
+      }
+    }
+
+    // Additional warnings
+    if (mergedData.due_date && new Date(mergedData.due_date) < today && mergedData.status !== "hoan_thanh") {
+      return {
+        error: null,
+        warning: "⏰ Lưu ý: Công việc đã quá hạn! Bạn có muốn cập nhật trạng thái không?"
+      };
+    }
+
+    return { error: null, warning: null };
+  };
+
   const handleInlineEditSave = (task: WorkTask) => {
     // Use functional update to ensure we get the latest state
     setEditingValues((prevEditingValues) => {
       const changes = prevEditingValues[task.id];
       if (changes && Object.keys(changes).length > 0) {
+        // Validate changes
+        const validationResult = validateInlineEdit(task, changes);
+        if (validationResult.error) {
+          toast({
+            title: "❌ Lỗi nhập liệu",
+            description: validationResult.error,
+            variant: "destructive",
+            duration: 6000, // Show longer for important errors
+          });
+          return prevEditingValues; // Don't save, keep editing
+        }
+        
+        if (validationResult.warning) {
+          toast({
+            title: "⚠️ Cảnh báo",
+            description: validationResult.warning,
+            variant: "default",
+            duration: 4000,
+          });
+        }
+
         // Convert column IDs to actual field names
         const dataToSave: Partial<WorkTask> = {};
         Object.entries(changes).forEach(([key, value]) => {
@@ -1245,3 +1316,4 @@ export default function ListView({
     </div>
   );
 }
+

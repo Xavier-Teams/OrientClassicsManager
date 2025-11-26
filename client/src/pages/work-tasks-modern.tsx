@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ const WORK_GROUP_LABELS: Record<string, string> = {
 export default function WorkTasksModern() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [location] = useLocation();
   const isManager = canAccessWorkReports(user);
   const [currentView, setCurrentView] = useState<ViewType>("list");
 
@@ -42,6 +44,21 @@ export default function WorkTasksModern() {
   const [selectedFrequency, setSelectedFrequency] = useState<string>("all");
   const [selectedPriority, setSelectedPriority] = useState<string>("all");
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+
+  // Read URL parameters and set initial filters
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    const status = urlParams.get("status");
+    const workGroup = urlParams.get("work_group");
+    const assignedTo = urlParams.get("assigned_to");
+    const search = urlParams.get("search");
+    
+    if (status) setSelectedStatus(status);
+    if (workGroup) setSelectedWorkGroup(workGroup);
+    if (assignedTo) setSelectedUserId(parseInt(assignedTo));
+    if (search) setSearchTerm(search);
+  }, [location]);
 
   // Build query params
   const queryParams: any = {

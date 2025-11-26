@@ -2,7 +2,14 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { apiClient, WorkTask } from "@/lib/api";
 import {
   Clock,
@@ -10,13 +17,59 @@ import {
   XCircle,
   AlertTriangle,
   FolderKanban,
+  TrendingUp,
+  BarChart3,
+  PieChart as PieChartIcon,
 } from "lucide-react";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer } from "recharts";
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Area,
+  AreaChart,
+  LineChart,
+  Line,
+} from "recharts";
+import { cn } from "@/lib/utils";
+import "@/styles/animations.css";
+
+// Helper function to create work-tasks URL with filters
+const createWorkTasksURL = (filters: {
+  status?: string;
+  work_group?: string;
+  assigned_to?: number;
+  search?: string;
+}) => {
+  const params = new URLSearchParams();
+
+  if (filters.status && filters.status !== "all") {
+    params.set("status", filters.status);
+  }
+  if (filters.work_group && filters.work_group !== "all") {
+    params.set("work_group", filters.work_group);
+  }
+  if (filters.assigned_to) {
+    params.set("assigned_to", filters.assigned_to.toString());
+  }
+  if (filters.search) {
+    params.set("search", filters.search);
+  }
+
+  const queryString = params.toString();
+  return `/work-tasks${queryString ? `?${queryString}` : ""}`;
+};
 
 const WORK_GROUP_LABELS: Record<string, string> = {
   chung: "Công việc chung",
@@ -34,8 +87,25 @@ export default function WorkReports() {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
+  // Trend chart filters
+  const [trendFilter, setTrendFilter] = useState("total"); // total, work_group, status
+  const [selectedWorkGroups, setSelectedWorkGroups] = useState<string[]>([
+    "chung",
+    "bien_tap",
+    "thiet_ke_cntt",
+  ]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([
+    "hoan_thanh",
+    "dang_tien_hanh",
+    "cham_tien_do",
+  ]);
+
   // Fetch all work tasks for the selected month/year
-  const { data: tasksData, isLoading, error } = useQuery({
+  const {
+    data: tasksData,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["work-tasks-reports", selectedMonth, selectedYear],
     queryFn: () => apiClient.getWorkTasks({ page_size: 1000 }),
   });
@@ -57,12 +127,16 @@ export default function WorkReports() {
   // BC 1: TỔNG QUÁT calculations
   const bc1Data = useMemo(() => {
     const total = filteredTasks.length;
-    const completed = filteredTasks.filter((t) => t.status === "hoan_thanh").length;
-    const inProgress = filteredTasks.filter((t) => t.status === "dang_tien_hanh").length;
+    const completed = filteredTasks.filter(
+      (t) => t.status === "hoan_thanh"
+    ).length;
+    const inProgress = filteredTasks.filter(
+      (t) => t.status === "dang_tien_hanh"
+    ).length;
     const notCompleted = filteredTasks.filter(
       (t) => t.status !== "hoan_thanh" && t.status !== "da_huy"
     ).length;
-    
+
     // Chậm tiến độ (chưa hoàn thành): có due_date đã qua và chưa hoàn thành
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -119,7 +193,9 @@ export default function WorkReports() {
 
   // BC 3: NHÓM CÔNG VIỆC ĐÃ HOÀN THÀNH calculations
   const bc3Data = useMemo(() => {
-    const completedTasks = filteredTasks.filter((t) => t.status === "hoan_thanh");
+    const completedTasks = filteredTasks.filter(
+      (t) => t.status === "hoan_thanh"
+    );
 
     const onTime: Record<string, number> = {};
     const early: Record<string, number> = {};
@@ -219,375 +295,1415 @@ export default function WorkReports() {
     },
   ].filter((item) => item.value > 0);
 
+  // Trend data for the last 12 months
+  const trendData = useMemo(() => {
+    const months = [];
+    const currentDate = new Date();
+
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth() - i,
+        1
+      );
+      const monthTasks = tasks.filter((task) => {
+        if (!task.start_date) return false;
+        const taskDate = new Date(task.start_date);
+        return (
+          taskDate.getMonth() === date.getMonth() &&
+          taskDate.getFullYear() === date.getFullYear()
+        );
+      });
+
+      const monthData: any = {
+        month: date.toLocaleDateString("vi-VN", {
+          month: "short",
+          year: "numeric",
+        }),
+        total: monthTasks.length,
+      };
+
+      // Work group data
+      if (trendFilter === "work_group") {
+        selectedWorkGroups.forEach((group) => {
+          const groupTasks = monthTasks.filter(
+            (task) => task.work_group === group
+          );
+          monthData[WORK_GROUP_LABELS[group] || group] = groupTasks.length;
+        });
+      }
+
+      // Status data
+      if (trendFilter === "status") {
+        const statusMap = {
+          hoan_thanh: "Hoàn thành",
+          dang_tien_hanh: "Đang tiến hành",
+          cham_tien_do: "Chậm tiến độ",
+          khong_hoan_thanh: "Không hoàn thành",
+        };
+
+        selectedStatuses.forEach((status) => {
+          let statusTasks;
+          if (status === "cham_tien_do") {
+            // Chậm tiến độ logic
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            statusTasks = monthTasks.filter((t) => {
+              if (t.status === "hoan_thanh" || t.status === "da_huy")
+                return false;
+              if (!t.due_date) return false;
+              const dueDate = new Date(t.due_date);
+              dueDate.setHours(0, 0, 0, 0);
+              return dueDate < today;
+            });
+          } else {
+            statusTasks = monthTasks.filter((task) => task.status === status);
+          }
+          monthData[statusMap[status as keyof typeof statusMap]] =
+            statusTasks.length;
+        });
+      }
+
+      months.push(monthData);
+    }
+
+    return months;
+  }, [tasks, trendFilter, selectedWorkGroups, selectedStatuses]);
+
+  // Handle badge click to navigate to work-tasks with filters
+  const handleBadgeClick = (filterType: string) => {
+    let url = "";
+
+    switch (filterType) {
+      case "total":
+        // Show all tasks for selected month/year
+        url = createWorkTasksURL({});
+        break;
+      case "completed":
+        url = createWorkTasksURL({ status: "hoan_thanh" });
+        break;
+      case "in_progress":
+        url = createWorkTasksURL({ status: "dang_tien_hanh" });
+        break;
+      case "not_completed":
+        // Show tasks that are not completed and not cancelled
+        url = createWorkTasksURL({ search: "chưa hoàn thành" });
+        break;
+      case "behind_schedule":
+        url = createWorkTasksURL({ status: "cham_tien_do" });
+        break;
+      default:
+        url = "/work-tasks";
+    }
+
+    // Open in new tab
+    window.open(url, "_blank");
+  };
+
   const currentDate = new Date();
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
-  const years = Array.from({ length: 5 }, (_, i) => currentDate.getFullYear() - 2 + i);
+  const years = Array.from(
+    { length: 5 },
+    (_, i) => currentDate.getFullYear() - 2 + i
+  );
+
+  // Loading skeleton component
+  const LoadingSkeleton = () => (
+    <div className="p-6 space-y-6 animate-pulse">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="h-8 bg-gray-200 rounded-md w-64 mb-2"></div>
+          <div className="h-4 bg-gray-200 rounded-md w-96"></div>
+        </div>
+        <div className="flex gap-4">
+          <div className="h-10 bg-gray-200 rounded-md w-32"></div>
+          <div className="h-10 bg-gray-200 rounded-md w-24"></div>
+        </div>
+      </div>
+
+      {/* Stats cards skeleton */}
+      <Card className="overflow-hidden">
+        <CardHeader>
+          <div className="h-6 bg-gray-200 rounded-md w-32"></div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-6">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Card key={i} className="relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-shimmer"></div>
+                <CardHeader className="pb-2">
+                  <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-4 ml-auto"></div>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-8 bg-gray-200 rounded w-12"></div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <div className="h-[300px] bg-gray-200 rounded-lg"></div>
+        </CardContent>
+      </Card>
+
+      {/* Chart cards skeleton */}
+      {Array.from({ length: 2 }).map((_, i) => (
+        <Card key={i}>
+          <CardHeader>
+            <div className="h-6 bg-gray-200 rounded-md w-48"></div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[400px] bg-gray-200 rounded-lg"></div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
 
   if (isLoading) {
-    return (
-      <div className="p-6">
-        <div className="text-muted-foreground">Đang tải dữ liệu...</div>
-      </div>
-    );
+    return <LoadingSkeleton />;
   }
 
   if (error) {
     return (
       <div className="p-6">
-        <div className="text-destructive">Lỗi khi tải dữ liệu: {String(error)}</div>
+        <div className="text-destructive">
+          Lỗi khi tải dữ liệu: {String(error)}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Báo cáo công việc chung</h1>
-          <p className="text-muted-foreground mt-1">
-            Thống kê và phân tích công việc theo nhóm, trạng thái và nhân sự
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          <Select
-            value={selectedMonth.toString()}
-            onValueChange={(value) => setSelectedMonth(parseInt(value))}
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {months.map((month) => (
-                <SelectItem key={month} value={month.toString()}>
-                  Tháng {month}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={selectedYear.toString()}
-            onValueChange={(value) => setSelectedYear(parseInt(value))}
-          >
-            <SelectTrigger className="w-[120px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {years.map((year) => (
-                <SelectItem key={year} value={year.toString()}>
-                  {year}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* Animated background elements */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-indigo-600/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-purple-400/20 to-pink-600/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
       </div>
 
-      {/* BC 1: TỔNG QUÁT */}
-      <Card>
-        <CardHeader>
-          <CardTitle>BC 1: TỔNG QUÁT</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Tổng số công việc</CardTitle>
-                <FolderKanban className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{bc1Data.total}</div>
-              </CardContent>
-            </Card>
+      <div className="relative p-6 space-y-6">
+        {/* Enhanced Header */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 p-8 text-white shadow-2xl">
+          <div className="absolute inset-0 bg-black/20"></div>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Hoàn thành</CardTitle>
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">{bc1Data.completed}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Đang tiến hành</CardTitle>
-                <Clock className="h-4 w-4 text-blue-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-600">{bc1Data.inProgress}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Chưa hoàn thành</CardTitle>
-                <XCircle className="h-4 w-4 text-red-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">{bc1Data.notCompleted}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Chậm tiến độ</CardTitle>
-                <AlertTriangle className="h-4 w-4 text-orange-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-orange-600">{bc1Data.behindSchedule}</div>
-                <p className="text-xs text-muted-foreground mt-1">Chưa hoàn thành</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {bc1ChartData.length > 0 && (
-            <ChartContainer
-              config={{
-                total: { label: "Tổng số", color: "#8884d8" },
-                completed: { label: "Hoàn thành", color: "#10b981" },
-                inProgress: { label: "Đang tiến hành", color: "#3b82f6" },
-                notCompleted: { label: "Chưa hoàn thành", color: "#ef4444" },
-                behindSchedule: { label: "Chậm tiến độ", color: "#f97316" },
-              }}
-              className="h-[300px]"
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={bc1ChartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar dataKey="value" fill="#8884d8" />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* BC 2: NHÓM CÔNG VIỆC CHƯA HOÀN THÀNH */}
-      <Card>
-        <CardHeader>
-          <CardTitle>BC 2: NHÓM CÔNG VIỆC CHƯA HOÀN THÀNH</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <h3 className="text-sm font-medium mb-4">Còn hạn</h3>
-              <div className="space-y-2">
-                {Object.entries(bc2Data.onTime).map(([group, count]) => (
-                  <div key={group} className="flex items-center justify-between p-2 rounded border">
-                    <span className="text-sm">{group}</span>
-                    <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                      {count}
-                    </Badge>
-                  </div>
-                ))}
-                {Object.keys(bc2Data.onTime).length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Không có công việc nào còn hạn
-                  </p>
-                )}
+          <div className="relative flex items-center justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                  <BarChart3 className="h-6 w-6" />
+                </div>
+                <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent">
+                  Báo cáo công việc chung
+                </h1>
+              </div>
+              <p className="text-blue-100 text-lg">
+                Thống kê và phân tích công việc theo nhóm, trạng thái và nhân sự
+              </p>
+              <div className="flex items-center gap-2 text-sm text-blue-200">
+                <TrendingUp className="h-4 w-4" />
+                <span>
+                  Cập nhật real-time • {filteredTasks.length} công việc
+                </span>
               </div>
             </div>
-            <div>
-              <h3 className="text-sm font-medium mb-4">Quá hạn</h3>
-              <div className="space-y-2">
-                {Object.entries(bc2Data.overdue).map(([group, count]) => (
-                  <div key={group} className="flex items-center justify-between p-2 rounded border">
-                    <span className="text-sm">{group}</span>
-                    <Badge variant="outline" className="bg-red-50 text-red-700">
-                      {count}
-                    </Badge>
-                  </div>
-                ))}
-                {Object.keys(bc2Data.overdue).length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Không có công việc nào quá hạn
-                  </p>
-                )}
-              </div>
+
+            <div className="flex items-center gap-4">
+              <Select
+                value={selectedMonth.toString()}
+                onValueChange={(value) => setSelectedMonth(parseInt(value))}>
+                <SelectTrigger className="w-[140px] bg-white/20 border-white/30 text-white backdrop-blur-sm hover:bg-white/30 transition-all duration-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {months.map((month) => (
+                    <SelectItem key={month} value={month.toString()}>
+                      Tháng {month}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={selectedYear.toString()}
+                onValueChange={(value) => setSelectedYear(parseInt(value))}>
+                <SelectTrigger className="w-[120px] bg-white/20 border-white/30 text-white backdrop-blur-sm hover:bg-white/30 transition-all duration-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {years.map((year) => (
+                    <SelectItem key={year} value={year.toString()}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
+        </div>
 
-          {bc2ChartData.length > 0 && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <ChartContainer
-                config={{
-                  "Còn hạn": { label: "Còn hạn", color: "#3b82f6" },
-                  "Quá hạn": { label: "Quá hạn", color: "#ef4444" },
-                }}
-                className="h-[300px]"
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={bc2ChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Legend />
-                    <Bar dataKey="Còn hạn" fill="#3b82f6" />
-                    <Bar dataKey="Quá hạn" fill="#ef4444" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartContainer>
+        {/* BC 1: TỔNG QUÁT */}
+        <Card className="relative overflow-hidden bg-white/80 backdrop-blur-sm border-0 shadow-xl">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5"></div>
+          <CardHeader className="relative">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg">
+                <BarChart3 className="h-5 w-5 text-white" />
+              </div>
+              <CardTitle className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                BC 1: TỔNG QUÁT
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="relative space-y-6">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+              {/* Total Tasks Card */}
+              <Card
+                className="group relative overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100 border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 cursor-pointer"
+                onClick={() => handleBadgeClick("total")}>
+                <div className="absolute inset-0 bg-gradient-to-br from-slate-400/10 to-slate-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-slate-700">
+                    Tổng số công việc
+                  </CardTitle>
+                  <div className="p-2 bg-gradient-to-br from-slate-500 to-slate-600 rounded-lg group-hover:scale-110 transition-transform duration-200">
+                    <FolderKanban className="h-4 w-4 text-white" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-slate-700 group-hover:text-slate-800 transition-colors">
+                    {bc1Data.total}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">công việc</div>
+                </CardContent>
+              </Card>
 
-              {bc2PieData.length > 0 && (
+              {/* Completed Tasks Card */}
+              <Card
+                className="group relative overflow-hidden bg-gradient-to-br from-green-50 to-emerald-100 border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 cursor-pointer"
+                onClick={() => handleBadgeClick("completed")}>
+                <div className="absolute inset-0 bg-gradient-to-br from-green-400/10 to-emerald-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-green-700">
+                    Hoàn thành
+                  </CardTitle>
+                  <div className="p-2 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg group-hover:scale-110 transition-transform duration-200">
+                    <CheckCircle2 className="h-4 w-4 text-white" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-green-700 group-hover:text-green-800 transition-colors">
+                    {bc1Data.completed}
+                  </div>
+                  <div className="text-xs text-green-600 mt-1">
+                    {bc1Data.total > 0
+                      ? `${((bc1Data.completed / bc1Data.total) * 100).toFixed(
+                          1
+                        )}%`
+                      : "0%"}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* In Progress Tasks Card */}
+              <Card
+                className="group relative overflow-hidden bg-gradient-to-br from-blue-50 to-blue-100 border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 cursor-pointer"
+                onClick={() => handleBadgeClick("in_progress")}>
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-400/10 to-blue-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-blue-700">
+                    Đang tiến hành
+                  </CardTitle>
+                  <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg group-hover:scale-110 transition-transform duration-200">
+                    <Clock className="h-4 w-4 text-white animate-spin" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-blue-700 group-hover:text-blue-800 transition-colors">
+                    {bc1Data.inProgress}
+                  </div>
+                  <div className="text-xs text-blue-600 mt-1">
+                    {bc1Data.total > 0
+                      ? `${((bc1Data.inProgress / bc1Data.total) * 100).toFixed(
+                          1
+                        )}%`
+                      : "0%"}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Not Completed Tasks Card */}
+              <Card
+                className="group relative overflow-hidden bg-gradient-to-br from-red-50 to-red-100 border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 cursor-pointer"
+                onClick={() => handleBadgeClick("not_completed")}>
+                <div className="absolute inset-0 bg-gradient-to-br from-red-400/10 to-red-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-red-700">
+                    Chưa hoàn thành
+                  </CardTitle>
+                  <div className="p-2 bg-gradient-to-br from-red-500 to-red-600 rounded-lg group-hover:scale-110 transition-transform duration-200">
+                    <XCircle className="h-4 w-4 text-white" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-red-700 group-hover:text-red-800 transition-colors">
+                    {bc1Data.notCompleted}
+                  </div>
+                  <div className="text-xs text-red-600 mt-1">
+                    {bc1Data.total > 0
+                      ? `${(
+                          (bc1Data.notCompleted / bc1Data.total) *
+                          100
+                        ).toFixed(1)}%`
+                      : "0%"}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Behind Schedule Tasks Card */}
+              <Card
+                className="group relative overflow-hidden bg-gradient-to-br from-orange-50 to-orange-100 border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 cursor-pointer"
+                onClick={() => handleBadgeClick("behind_schedule")}>
+                <div className="absolute inset-0 bg-gradient-to-br from-orange-400/10 to-orange-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-orange-700">
+                    Chậm tiến độ
+                  </CardTitle>
+                  <div className="p-2 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg group-hover:scale-110 transition-transform duration-200">
+                    <AlertTriangle className="h-4 w-4 text-white animate-pulse" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-orange-700 group-hover:text-orange-800 transition-colors">
+                    {bc1Data.behindSchedule}
+                  </div>
+                  <div className="text-xs text-orange-600 mt-1">
+                    Cần xử lý gấp
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {bc1ChartData.length > 0 && (
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-purple-500/5 to-indigo-500/5 rounded-xl"></div>
                 <ChartContainer
                   config={{
-                    "Còn hạn": { label: "Còn hạn", color: "#3b82f6" },
-                    "Quá hạn": { label: "Quá hạn", color: "#ef4444" },
+                    total: { label: "Tổng số", color: "#8884d8" },
+                    completed: { label: "Hoàn thành", color: "#10b981" },
+                    inProgress: { label: "Đang tiến hành", color: "#3b82f6" },
+                    notCompleted: {
+                      label: "Chưa hoàn thành",
+                      color: "#ef4444",
+                    },
+                    behindSchedule: { label: "Chậm tiến độ", color: "#f97316" },
                   }}
-                  className="h-[300px]"
-                >
+                  className="h-[400px] relative z-10">
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={bc2PieData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                        outerRadius={80}
-                        fill="#8884d8"
+                    <BarChart
+                      data={bc1ChartData}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <defs>
+                        <linearGradient
+                          id="barGradient"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1">
+                          <stop
+                            offset="0%"
+                            stopColor="#3b82f6"
+                            stopOpacity={0.8}
+                          />
+                          <stop
+                            offset="100%"
+                            stopColor="#1e40af"
+                            stopOpacity={0.3}
+                          />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="#e2e8f0"
+                        strokeOpacity={0.5}
+                      />
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fontSize: 12, fill: "#64748b" }}
+                        axisLine={{ stroke: "#e2e8f0" }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 12, fill: "#64748b" }}
+                        axisLine={{ stroke: "#e2e8f0" }}
+                      />
+                      <ChartTooltip
+                        content={<ChartTooltipContent />}
+                        cursor={{ fill: "rgba(59, 130, 246, 0.1)" }}
+                      />
+                      <Bar
                         dataKey="value"
-                      >
-                        {bc2PieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                    </PieChart>
+                        fill="url(#barGradient)"
+                        radius={[4, 4, 0, 0]}
+                        animationDuration={1000}
+                        animationBegin={0}
+                      />
+                    </BarChart>
                   </ResponsiveContainer>
                 </ChartContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* BC 2: NHÓM CÔNG VIỆC CHƯA HOÀN THÀNH */}
+        <Card className="relative overflow-hidden bg-white/80 backdrop-blur-sm border-0 shadow-xl">
+          <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-red-500/5"></div>
+          <CardHeader className="relative">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg">
+                <Clock className="h-5 w-5 text-white" />
+              </div>
+              <CardTitle className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
+                BC 2: NHÓM CÔNG VIỆC CHƯA HOÀN THÀNH
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="relative space-y-6">
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full"></div>
+                  <h3 className="text-lg font-semibold text-blue-700">
+                    Còn hạn
+                  </h3>
+                </div>
+                <div className="space-y-3">
+                  {Object.entries(bc2Data.onTime).map(
+                    ([group, count], index) => (
+                      <div
+                        key={group}
+                        className="group flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 hover:shadow-lg hover:scale-[1.02] transition-all duration-300"
+                        style={{ animationDelay: `${index * 100}ms` }}>
+                        <span className="text-sm font-medium text-blue-800 group-hover:text-blue-900 transition-colors">
+                          {group}
+                        </span>
+                        <Badge className="bg-gradient-to-r from-blue-500 to-blue-600 text-white border-0 shadow-md group-hover:shadow-lg transition-shadow">
+                          {count}
+                        </Badge>
+                      </div>
+                    )
+                  )}
+                  {Object.keys(bc2Data.onTime).length === 0 && (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 bg-gradient-to-r from-blue-100 to-blue-200 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <CheckCircle2 className="h-8 w-8 text-blue-600" />
+                      </div>
+                      <p className="text-sm text-blue-600 font-medium">
+                        Tuyệt vời! Không có công việc nào còn hạn
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-gradient-to-r from-red-400 to-red-600 rounded-full animate-pulse"></div>
+                  <h3 className="text-lg font-semibold text-red-700">
+                    Quá hạn
+                  </h3>
+                </div>
+                <div className="space-y-3">
+                  {Object.entries(bc2Data.overdue).map(
+                    ([group, count], index) => (
+                      <div
+                        key={group}
+                        className="group flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-red-50 to-red-100 border border-red-200 hover:shadow-lg hover:scale-[1.02] transition-all duration-300"
+                        style={{ animationDelay: `${index * 100}ms` }}>
+                        <span className="text-sm font-medium text-red-800 group-hover:text-red-900 transition-colors">
+                          {group}
+                        </span>
+                        <Badge className="bg-gradient-to-r from-red-500 to-red-600 text-white border-0 shadow-md group-hover:shadow-lg transition-shadow animate-pulse">
+                          {count}
+                        </Badge>
+                      </div>
+                    )
+                  )}
+                  {Object.keys(bc2Data.overdue).length === 0 && (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 bg-gradient-to-r from-green-100 to-green-200 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <CheckCircle2 className="h-8 w-8 text-green-600" />
+                      </div>
+                      <p className="text-sm text-green-600 font-medium">
+                        Xuất sắc! Không có công việc nào quá hạn
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {bc2ChartData.length > 0 && (
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-red-500/5 to-orange-500/5 rounded-xl"></div>
+                  <ChartContainer
+                    config={{
+                      "Còn hạn": { label: "Còn hạn", color: "#3b82f6" },
+                      "Quá hạn": { label: "Quá hạn", color: "#ef4444" },
+                    }}
+                    className="h-[350px] relative z-10">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={bc2ChartData}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                        <defs>
+                          <linearGradient
+                            id="onTimeGradient"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1">
+                            <stop
+                              offset="0%"
+                              stopColor="#3b82f6"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="#1e40af"
+                              stopOpacity={0.3}
+                            />
+                          </linearGradient>
+                          <linearGradient
+                            id="overdueGradient"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1">
+                            <stop
+                              offset="0%"
+                              stopColor="#ef4444"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="#dc2626"
+                              stopOpacity={0.3}
+                            />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="#e2e8f0"
+                          strokeOpacity={0.5}
+                        />
+                        <XAxis
+                          dataKey="name"
+                          tick={{ fontSize: 11, fill: "#64748b" }}
+                          axisLine={{ stroke: "#e2e8f0" }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 12, fill: "#64748b" }}
+                          axisLine={{ stroke: "#e2e8f0" }}
+                        />
+                        <ChartTooltip
+                          content={<ChartTooltipContent />}
+                          cursor={{ fill: "rgba(59, 130, 246, 0.1)" }}
+                        />
+                        <Legend />
+                        <Bar
+                          dataKey="Còn hạn"
+                          fill="url(#onTimeGradient)"
+                          radius={[4, 4, 0, 0]}
+                          animationDuration={1200}
+                          animationBegin={0}
+                        />
+                        <Bar
+                          dataKey="Quá hạn"
+                          fill="url(#overdueGradient)"
+                          radius={[4, 4, 0, 0]}
+                          animationDuration={1200}
+                          animationBegin={200}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                </div>
+
+                {bc2PieData.length > 0 && (
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-red-500/5 rounded-xl"></div>
+                    <ChartContainer
+                      config={{
+                        "Còn hạn": { label: "Còn hạn", color: "#3b82f6" },
+                        "Quá hạn": { label: "Quá hạn", color: "#ef4444" },
+                      }}
+                      className="h-[350px] relative z-10">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <defs>
+                            <linearGradient
+                              id="pieOnTime"
+                              x1="0"
+                              y1="0"
+                              x2="1"
+                              y2="1">
+                              <stop offset="0%" stopColor="#60a5fa" />
+                              <stop offset="100%" stopColor="#3b82f6" />
+                            </linearGradient>
+                            <linearGradient
+                              id="pieOverdue"
+                              x1="0"
+                              y1="0"
+                              x2="1"
+                              y2="1">
+                              <stop offset="0%" stopColor="#f87171" />
+                              <stop offset="100%" stopColor="#ef4444" />
+                            </linearGradient>
+                          </defs>
+                          <Pie
+                            data={bc2PieData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) =>
+                              `${name}: ${(percent * 100).toFixed(0)}%`
+                            }
+                            outerRadius={100}
+                            innerRadius={40}
+                            fill="#8884d8"
+                            dataKey="value"
+                            animationDuration={1500}
+                            animationBegin={0}>
+                            {bc2PieData.map((entry, index) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={
+                                  entry.name === "Còn hạn"
+                                    ? "url(#pieOnTime)"
+                                    : "url(#pieOverdue)"
+                                }
+                                stroke="#fff"
+                                strokeWidth={2}
+                              />
+                            ))}
+                          </Pie>
+                          <ChartTooltip
+                            content={<ChartTooltipContent />}
+                            contentStyle={{
+                              backgroundColor: "rgba(255, 255, 255, 0.95)",
+                              border: "none",
+                              borderRadius: "8px",
+                              boxShadow: "0 10px 25px rgba(0, 0, 0, 0.1)",
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </ChartContainer>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* BC 3: NHÓM CÔNG VIỆC ĐÃ HOÀN THÀNH */}
+        <Card className="relative overflow-hidden bg-white/80 backdrop-blur-sm border-0 shadow-xl">
+          <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 to-blue-500/5"></div>
+          <CardHeader className="relative">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-gradient-to-r from-green-500 to-blue-500 rounded-lg">
+                <CheckCircle2 className="h-5 w-5 text-white" />
+              </div>
+              <CardTitle className="text-xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
+                BC 3: NHÓM CÔNG VIỆC ĐÃ HOÀN THÀNH
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="relative space-y-6">
+            <div className="grid gap-6 md:grid-cols-3">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full"></div>
+                  <h3 className="text-lg font-semibold text-blue-700">
+                    Đúng tiến độ
+                  </h3>
+                </div>
+                <div className="space-y-3">
+                  {Object.entries(bc3Data.onTime).map(
+                    ([group, count], index) => (
+                      <div
+                        key={group}
+                        className="group flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 hover:shadow-lg hover:scale-[1.02] transition-all duration-300"
+                        style={{ animationDelay: `${index * 100}ms` }}>
+                        <span className="text-sm font-medium text-blue-800 group-hover:text-blue-900 transition-colors">
+                          {group}
+                        </span>
+                        <Badge className="bg-gradient-to-r from-blue-500 to-blue-600 text-white border-0 shadow-md group-hover:shadow-lg transition-shadow">
+                          {count}
+                        </Badge>
+                      </div>
+                    )
+                  )}
+                  {Object.keys(bc3Data.onTime).length === 0 && (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 bg-gradient-to-r from-blue-100 to-blue-200 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Clock className="h-8 w-8 text-blue-600" />
+                      </div>
+                      <p className="text-sm text-blue-600 font-medium">
+                        Chưa có công việc nào
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-gradient-to-r from-green-400 to-green-600 rounded-full"></div>
+                  <h3 className="text-lg font-semibold text-green-700">
+                    Hoàn thành trước hạn
+                  </h3>
+                </div>
+                <div className="space-y-3">
+                  {Object.entries(bc3Data.early).map(
+                    ([group, count], index) => (
+                      <div
+                        key={group}
+                        className="group flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-green-50 to-green-100 border border-green-200 hover:shadow-lg hover:scale-[1.02] transition-all duration-300"
+                        style={{ animationDelay: `${index * 100}ms` }}>
+                        <span className="text-sm font-medium text-green-800 group-hover:text-green-900 transition-colors">
+                          {group}
+                        </span>
+                        <Badge className="bg-gradient-to-r from-green-500 to-green-600 text-white border-0 shadow-md group-hover:shadow-lg transition-shadow">
+                          {count}
+                        </Badge>
+                      </div>
+                    )
+                  )}
+                  {Object.keys(bc3Data.early).length === 0 && (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 bg-gradient-to-r from-green-100 to-green-200 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <CheckCircle2 className="h-8 w-8 text-green-600" />
+                      </div>
+                      <p className="text-sm text-green-600 font-medium">
+                        Chưa có công việc nào
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-gradient-to-r from-orange-400 to-orange-600 rounded-full animate-pulse"></div>
+                  <h3 className="text-lg font-semibold text-orange-700">
+                    Hoàn thành chậm tiến độ
+                  </h3>
+                </div>
+                <div className="space-y-3">
+                  {Object.entries(bc3Data.late).map(([group, count], index) => (
+                    <div
+                      key={group}
+                      className="group flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-200 hover:shadow-lg hover:scale-[1.02] transition-all duration-300"
+                      style={{ animationDelay: `${index * 100}ms` }}>
+                      <span className="text-sm font-medium text-orange-800 group-hover:text-orange-900 transition-colors">
+                        {group}
+                      </span>
+                      <Badge className="bg-gradient-to-r from-orange-500 to-orange-600 text-white border-0 shadow-md group-hover:shadow-lg transition-shadow animate-pulse">
+                        {count}
+                      </Badge>
+                    </div>
+                  ))}
+                  {Object.keys(bc3Data.late).length === 0 && (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 bg-gradient-to-r from-orange-100 to-orange-200 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <AlertTriangle className="h-8 w-8 text-orange-600" />
+                      </div>
+                      <p className="text-sm text-orange-600 font-medium">
+                        Chưa có công việc nào
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {bc3ChartData.length > 0 && (
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-green-500/5 to-orange-500/5 rounded-xl"></div>
+                  <ChartContainer
+                    config={{
+                      "Đúng tiến độ": {
+                        label: "Đúng tiến độ",
+                        color: "#3b82f6",
+                      },
+                      "Trước hạn": { label: "Trước hạn", color: "#10b981" },
+                      "Chậm tiến độ": {
+                        label: "Chậm tiến độ",
+                        color: "#f97316",
+                      },
+                    }}
+                    className="h-[350px] relative z-10">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={bc3ChartData}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                        <defs>
+                          <linearGradient
+                            id="onTimeGradientBC3"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1">
+                            <stop
+                              offset="0%"
+                              stopColor="#3b82f6"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="#1e40af"
+                              stopOpacity={0.3}
+                            />
+                          </linearGradient>
+                          <linearGradient
+                            id="earlyGradient"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1">
+                            <stop
+                              offset="0%"
+                              stopColor="#10b981"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="#059669"
+                              stopOpacity={0.3}
+                            />
+                          </linearGradient>
+                          <linearGradient
+                            id="lateGradient"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1">
+                            <stop
+                              offset="0%"
+                              stopColor="#f97316"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="#ea580c"
+                              stopOpacity={0.3}
+                            />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="#e2e8f0"
+                          strokeOpacity={0.5}
+                        />
+                        <XAxis
+                          dataKey="name"
+                          tick={{ fontSize: 11, fill: "#64748b" }}
+                          axisLine={{ stroke: "#e2e8f0" }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 12, fill: "#64748b" }}
+                          axisLine={{ stroke: "#e2e8f0" }}
+                        />
+                        <ChartTooltip
+                          content={<ChartTooltipContent />}
+                          cursor={{ fill: "rgba(59, 130, 246, 0.1)" }}
+                        />
+                        <Legend />
+                        <Bar
+                          dataKey="Đúng tiến độ"
+                          fill="url(#onTimeGradientBC3)"
+                          radius={[4, 4, 0, 0]}
+                          animationDuration={1200}
+                          animationBegin={0}
+                        />
+                        <Bar
+                          dataKey="Trước hạn"
+                          fill="url(#earlyGradient)"
+                          radius={[4, 4, 0, 0]}
+                          animationDuration={1200}
+                          animationBegin={200}
+                        />
+                        <Bar
+                          dataKey="Chậm tiến độ"
+                          fill="url(#lateGradient)"
+                          radius={[4, 4, 0, 0]}
+                          animationDuration={1200}
+                          animationBegin={400}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                </div>
+
+                {bc3PieData.length > 0 && (
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-green-500/5 to-orange-500/5 rounded-xl"></div>
+                    <ChartContainer
+                      config={{
+                        "Đúng tiến độ": {
+                          label: "Đúng tiến độ",
+                          color: "#3b82f6",
+                        },
+                        "Trước hạn": { label: "Trước hạn", color: "#10b981" },
+                        "Chậm tiến độ": {
+                          label: "Chậm tiến độ",
+                          color: "#f97316",
+                        },
+                      }}
+                      className="h-[350px] relative z-10">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <defs>
+                            <linearGradient
+                              id="pieOnTimeBC3"
+                              x1="0"
+                              y1="0"
+                              x2="1"
+                              y2="1">
+                              <stop offset="0%" stopColor="#60a5fa" />
+                              <stop offset="100%" stopColor="#3b82f6" />
+                            </linearGradient>
+                            <linearGradient
+                              id="pieEarly"
+                              x1="0"
+                              y1="0"
+                              x2="1"
+                              y2="1">
+                              <stop offset="0%" stopColor="#34d399" />
+                              <stop offset="100%" stopColor="#10b981" />
+                            </linearGradient>
+                            <linearGradient
+                              id="pieLate"
+                              x1="0"
+                              y1="0"
+                              x2="1"
+                              y2="1">
+                              <stop offset="0%" stopColor="#fb923c" />
+                              <stop offset="100%" stopColor="#f97316" />
+                            </linearGradient>
+                          </defs>
+                          <Pie
+                            data={bc3PieData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) =>
+                              `${name}: ${(percent * 100).toFixed(0)}%`
+                            }
+                            outerRadius={100}
+                            innerRadius={40}
+                            fill="#8884d8"
+                            dataKey="value"
+                            animationDuration={1500}
+                            animationBegin={0}>
+                            {bc3PieData.map((entry, index) => {
+                              let fillColor = "url(#pieOnTimeBC3)";
+                              if (entry.name === "Trước hạn")
+                                fillColor = "url(#pieEarly)";
+                              if (entry.name === "Chậm tiến độ")
+                                fillColor = "url(#pieLate)";
+
+                              return (
+                                <Cell
+                                  key={`cell-${index}`}
+                                  fill={fillColor}
+                                  stroke="#fff"
+                                  strokeWidth={2}
+                                />
+                              );
+                            })}
+                          </Pie>
+                          <ChartTooltip
+                            content={<ChartTooltipContent />}
+                            contentStyle={{
+                              backgroundColor: "rgba(255, 255, 255, 0.95)",
+                              border: "none",
+                              borderRadius: "8px",
+                              boxShadow: "0 10px 25px rgba(0, 0, 0, 0.1)",
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </ChartContainer>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* BIỂU ĐỒ XU HƯỚNG */}
+        <Card className="relative overflow-hidden bg-white/80 backdrop-blur-sm border-0 shadow-xl">
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5"></div>
+          <CardHeader className="relative z-10">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg">
+                  <TrendingUp className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                    Biểu đồ xu hướng
+                  </CardTitle>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Theo dõi sự thay đổi qua các tháng
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Trend Filters */}
+            <div className="mt-6 space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={trendFilter === "total" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setTrendFilter("total")}
+                  className={
+                    trendFilter === "total"
+                      ? "bg-indigo-600 hover:bg-indigo-700"
+                      : ""
+                  }>
+                  Tổng số công việc
+                </Button>
+                <Button
+                  variant={trendFilter === "work_group" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setTrendFilter("work_group")}
+                  className={
+                    trendFilter === "work_group"
+                      ? "bg-indigo-600 hover:bg-indigo-700"
+                      : ""
+                  }>
+                  Theo nhóm công việc
+                </Button>
+                <Button
+                  variant={trendFilter === "status" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setTrendFilter("status")}
+                  className={
+                    trendFilter === "status"
+                      ? "bg-indigo-600 hover:bg-indigo-700"
+                      : ""
+                  }>
+                  Theo trạng thái
+                </Button>
+              </div>
+
+              {/* Work Group Filters */}
+              {trendFilter === "work_group" && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700">
+                    Chọn nhóm công việc:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(WORK_GROUP_LABELS).map(([key, label]) => (
+                      <Button
+                        key={key}
+                        variant={
+                          selectedWorkGroups.includes(key)
+                            ? "default"
+                            : "outline"
+                        }
+                        size="sm"
+                        onClick={() => {
+                          setSelectedWorkGroups((prev) =>
+                            prev.includes(key)
+                              ? prev.filter((g) => g !== key)
+                              : [...prev, key]
+                          );
+                        }}
+                        className={
+                          selectedWorkGroups.includes(key)
+                            ? "bg-purple-600 hover:bg-purple-700"
+                            : ""
+                        }>
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Status Filters */}
+              {trendFilter === "status" && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700">
+                    Chọn trạng thái:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { key: "hoan_thanh", label: "Hoàn thành" },
+                      { key: "dang_tien_hanh", label: "Đang tiến hành" },
+                      { key: "cham_tien_do", label: "Chậm tiến độ" },
+                      { key: "khong_hoan_thanh", label: "Không hoàn thành" },
+                    ].map(({ key, label }) => (
+                      <Button
+                        key={key}
+                        variant={
+                          selectedStatuses.includes(key) ? "default" : "outline"
+                        }
+                        size="sm"
+                        onClick={() => {
+                          setSelectedStatuses((prev) =>
+                            prev.includes(key)
+                              ? prev.filter((s) => s !== key)
+                              : [...prev, key]
+                          );
+                        }}
+                        className={
+                          selectedStatuses.includes(key)
+                            ? "bg-purple-600 hover:bg-purple-700"
+                            : ""
+                        }>
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
 
-      {/* BC 3: NHÓM CÔNG VIỆC ĐÃ HOÀN THÀNH */}
-      <Card>
-        <CardHeader>
-          <CardTitle>BC 3: NHÓM CÔNG VIỆC ĐÃ HOÀN THÀNH</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
-              <h3 className="text-sm font-medium mb-4">Đúng tiến độ</h3>
-              <div className="space-y-2">
-                {Object.entries(bc3Data.onTime).map(([group, count]) => (
-                  <div key={group} className="flex items-center justify-between p-2 rounded border">
-                    <span className="text-sm">{group}</span>
-                    <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                      {count}
-                    </Badge>
-                  </div>
-                ))}
-                {Object.keys(bc3Data.onTime).length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Không có công việc nào
-                  </p>
-                )}
-              </div>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium mb-4">Hoàn thành trước hạn</h3>
-              <div className="space-y-2">
-                {Object.entries(bc3Data.early).map(([group, count]) => (
-                  <div key={group} className="flex items-center justify-between p-2 rounded border">
-                    <span className="text-sm">{group}</span>
-                    <Badge variant="outline" className="bg-green-50 text-green-700">
-                      {count}
-                    </Badge>
-                  </div>
-                ))}
-                {Object.keys(bc3Data.early).length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Không có công việc nào
-                  </p>
-                )}
-              </div>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium mb-4">Hoàn thành chậm tiến độ</h3>
-              <div className="space-y-2">
-                {Object.entries(bc3Data.late).map(([group, count]) => (
-                  <div key={group} className="flex items-center justify-between p-2 rounded border">
-                    <span className="text-sm">{group}</span>
-                    <Badge variant="outline" className="bg-orange-50 text-orange-700">
-                      {count}
-                    </Badge>
-                  </div>
-                ))}
-                {Object.keys(bc3Data.late).length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Không có công việc nào
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {bc3ChartData.length > 0 && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <ChartContainer
-                config={{
-                  "Đúng tiến độ": { label: "Đúng tiến độ", color: "#3b82f6" },
-                  "Trước hạn": { label: "Trước hạn", color: "#10b981" },
-                  "Chậm tiến độ": { label: "Chậm tiến độ", color: "#f97316" },
-                }}
-                className="h-[300px]"
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={bc3ChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Legend />
-                    <Bar dataKey="Đúng tiến độ" fill="#3b82f6" />
-                    <Bar dataKey="Trước hạn" fill="#10b981" />
-                    <Bar dataKey="Chậm tiến độ" fill="#f97316" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartContainer>
-
-              {bc3PieData.length > 0 && (
+          <CardContent className="relative z-10">
+            {trendData.length > 0 && (
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
                 <ChartContainer
                   config={{
-                    "Đúng tiến độ": { label: "Đúng tiến độ", color: "#3b82f6" },
-                    "Trước hạn": { label: "Trước hạn", color: "#10b981" },
-                    "Chậm tiến độ": { label: "Chậm tiến độ", color: "#f97316" },
+                    total: { label: "Tổng số", color: "#6366f1" },
                   }}
-                  className="h-[300px]"
-                >
+                  className="h-[400px] relative z-10">
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={bc3PieData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {bc3PieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                    </PieChart>
+                    <LineChart
+                      data={trendData}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <defs>
+                        <linearGradient
+                          id="lineGradient1"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1">
+                          <stop
+                            offset="0%"
+                            stopColor="#6366f1"
+                            stopOpacity={0.8}
+                          />
+                          <stop
+                            offset="100%"
+                            stopColor="#6366f1"
+                            stopOpacity={0.1}
+                          />
+                        </linearGradient>
+                        <linearGradient
+                          id="lineGradient2"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1">
+                          <stop
+                            offset="0%"
+                            stopColor="#8b5cf6"
+                            stopOpacity={0.8}
+                          />
+                          <stop
+                            offset="100%"
+                            stopColor="#8b5cf6"
+                            stopOpacity={0.1}
+                          />
+                        </linearGradient>
+                        <linearGradient
+                          id="lineGradient3"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1">
+                          <stop
+                            offset="0%"
+                            stopColor="#06b6d4"
+                            stopOpacity={0.8}
+                          />
+                          <stop
+                            offset="100%"
+                            stopColor="#06b6d4"
+                            stopOpacity={0.1}
+                          />
+                        </linearGradient>
+                        <linearGradient
+                          id="lineGradient4"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1">
+                          <stop
+                            offset="0%"
+                            stopColor="#10b981"
+                            stopOpacity={0.8}
+                          />
+                          <stop
+                            offset="100%"
+                            stopColor="#10b981"
+                            stopOpacity={0.1}
+                          />
+                        </linearGradient>
+                        <linearGradient
+                          id="lineGradient5"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1">
+                          <stop
+                            offset="0%"
+                            stopColor="#f59e0b"
+                            stopOpacity={0.8}
+                          />
+                          <stop
+                            offset="100%"
+                            stopColor="#f59e0b"
+                            stopOpacity={0.1}
+                          />
+                        </linearGradient>
+                      </defs>
+
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="#e2e8f0"
+                        strokeOpacity={0.5}
+                      />
+                      <XAxis
+                        dataKey="month"
+                        tick={{ fontSize: 12, fill: "#64748b" }}
+                        axisLine={{ stroke: "#e2e8f0" }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 12, fill: "#64748b" }}
+                        axisLine={{ stroke: "#e2e8f0" }}
+                      />
+                      <ChartTooltip
+                        content={<ChartTooltipContent />}
+                        cursor={{ fill: "rgba(99, 102, 241, 0.1)" }}
+                      />
+                      <Legend />
+
+                      {trendFilter === "total" && (
+                        <Line
+                          type="monotone"
+                          dataKey="total"
+                          stroke="#6366f1"
+                          strokeWidth={3}
+                          dot={{ fill: "#6366f1", strokeWidth: 2, r: 5 }}
+                          activeDot={{
+                            r: 7,
+                            stroke: "#6366f1",
+                            strokeWidth: 2,
+                            fill: "#ffffff",
+                          }}
+                          animationDuration={1500}
+                        />
+                      )}
+
+                      {trendFilter === "work_group" &&
+                        selectedWorkGroups.map((group, index) => {
+                          const colors = [
+                            "#6366f1",
+                            "#8b5cf6",
+                            "#06b6d4",
+                            "#10b981",
+                            "#f59e0b",
+                          ];
+                          const color = colors[index % colors.length];
+                          return (
+                            <Line
+                              key={group}
+                              type="monotone"
+                              dataKey={WORK_GROUP_LABELS[group] || group}
+                              stroke={color}
+                              strokeWidth={2}
+                              dot={{ fill: color, strokeWidth: 1, r: 4 }}
+                              activeDot={{
+                                r: 6,
+                                stroke: color,
+                                strokeWidth: 2,
+                                fill: "#ffffff",
+                              }}
+                              animationDuration={1500}
+                              animationBegin={index * 200}
+                            />
+                          );
+                        })}
+
+                      {trendFilter === "status" &&
+                        selectedStatuses.map((status, index) => {
+                          const statusMap = {
+                            hoan_thanh: {
+                              color: "#10b981",
+                              label: "Hoàn thành",
+                            },
+                            dang_tien_hanh: {
+                              color: "#3b82f6",
+                              label: "Đang tiến hành",
+                            },
+                            cham_tien_do: {
+                              color: "#f59e0b",
+                              label: "Chậm tiến độ",
+                            },
+                            khong_hoan_thanh: {
+                              color: "#ef4444",
+                              label: "Không hoàn thành",
+                            },
+                          };
+                          const statusInfo =
+                            statusMap[status as keyof typeof statusMap];
+                          return (
+                            <Line
+                              key={status}
+                              type="monotone"
+                              dataKey={statusInfo.label}
+                              stroke={statusInfo.color}
+                              strokeWidth={2}
+                              dot={{
+                                fill: statusInfo.color,
+                                strokeWidth: 1,
+                                r: 4,
+                              }}
+                              activeDot={{
+                                r: 6,
+                                stroke: statusInfo.color,
+                                strokeWidth: 2,
+                                fill: "#ffffff",
+                              }}
+                              animationDuration={1500}
+                              animationBegin={index * 200}
+                            />
+                          );
+                        })}
+                    </LineChart>
                   </ResponsiveContainer>
                 </ChartContainer>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

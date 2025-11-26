@@ -205,6 +205,53 @@ class WorkTaskSerializer(serializers.ModelSerializer):
             }
             for value in values
         }
+    
+    def validate_completed_date(self, value):
+        """
+        Validate ngày hoàn thành:
+        1. Không được là ngày trong tương lai (chống gian lận)
+        """
+        if value:
+            from django.utils import timezone
+            today = timezone.now().date()
+            if value > today:
+                raise serializers.ValidationError(
+                    "Ngày hoàn thành không được là ngày trong tương lai. "
+                    "Vui lòng chọn ngày hôm nay hoặc trước đó."
+                )
+        return value
+    
+    def validate(self, data):
+        """
+        Validate toàn bộ dữ liệu:
+        1. Hạn hoàn thành >= Ngày bắt đầu
+        2. Ngày hoàn thành >= Ngày bắt đầu
+        """
+        start_date = data.get('start_date')
+        due_date = data.get('due_date') 
+        completed_date = data.get('completed_date')
+        
+        # Nếu đang update, lấy giá trị hiện tại nếu không có trong data
+        if self.instance:
+            start_date = start_date or self.instance.start_date
+            due_date = due_date or self.instance.due_date
+            completed_date = completed_date or self.instance.completed_date
+        
+        # Validation 1: Hạn hoàn thành >= Ngày bắt đầu
+        if start_date and due_date:
+            if due_date < start_date:
+                raise serializers.ValidationError({
+                    'due_date': 'Hạn hoàn thành phải lớn hơn hoặc bằng ngày bắt đầu công việc.'
+                })
+        
+        # Validation 2: Ngày hoàn thành >= Ngày bắt đầu
+        if start_date and completed_date:
+            if completed_date < start_date:
+                raise serializers.ValidationError({
+                    'completed_date': 'Ngày hoàn thành không được nhỏ hơn ngày bắt đầu công việc.'
+                })
+        
+        return data
 
 
 class CustomFieldSerializer(serializers.ModelSerializer):
