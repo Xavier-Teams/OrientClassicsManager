@@ -103,7 +103,21 @@ export default function WorkTasksModern() {
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter((t) => t.status === "hoan_thanh").length;
   const inProgressTasks = tasks.filter((t) => t.status === "dang_tien_hanh").length;
-  const behindScheduleTasks = tasks.filter((t) => t.status === "cham_tien_do").length;
+  
+  // Calculate behind schedule tasks: in progress tasks that are overdue
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const behindScheduleTasks = tasks.filter((t) => {
+    // Must be in progress (not completed, not cancelled)
+    if (t.status === "hoan_thanh" || t.status === "da_huy") return false;
+    // Must have a due date
+    if (!t.due_date) return false;
+    // Due date must be in the past
+    const dueDate = new Date(t.due_date);
+    dueDate.setHours(0, 0, 0, 0);
+    return dueDate < today;
+  }).length;
+  
   const notCompletedTasks = tasks.filter((t) => t.status === "khong_hoan_thanh").length;
 
   const exportToCSV = () => {
