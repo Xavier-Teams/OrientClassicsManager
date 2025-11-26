@@ -13,13 +13,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DateInput } from "@/components/ui/date-input";
-import { apiClient, WorkTask } from "@/lib/api";
+import { apiClient, WorkTask, User } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle, Calendar, Clock, Shield } from "lucide-react";
@@ -111,8 +112,31 @@ export default function WorkTaskForm({
     completed_date: "",
     progress_percent: 0,
     notes: "",
-    assigned_to: user?.id || undefined,
+    assigned_to: user?.id ? [user.id] : [],
+    supervisor: undefined as number | undefined,
   });
+
+  const [users, setUsers] = useState<User[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
+  // Load users for assignment
+  useEffect(() => {
+    const loadUsers = async () => {
+      if (!open) return;
+
+      setLoadingUsers(true);
+      try {
+        const response = await apiClient.getUsers({ page_size: 100 });
+        setUsers(response.results);
+      } catch (error) {
+        console.error("Failed to load users:", error);
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+
+    loadUsers();
+  }, [open]);
 
   useEffect(() => {
     if (task) {
@@ -128,7 +152,8 @@ export default function WorkTaskForm({
         completed_date: task.completed_date || "",
         progress_percent: task.progress_percent || 0,
         notes: task.notes || "",
-        assigned_to: task.assigned_to || user?.id || undefined,
+        assigned_to: task.assigned_to_ids || (user?.id ? [user.id] : []),
+        supervisor: task.supervisor || undefined,
       });
     } else {
       setFormData({
@@ -143,7 +168,8 @@ export default function WorkTaskForm({
         completed_date: "",
         progress_percent: 0,
         notes: "",
-        assigned_to: user?.id || undefined,
+        assigned_to: user?.id ? [user.id] : [],
+        supervisor: undefined,
       });
     }
     setErrors({});
@@ -243,31 +269,51 @@ export default function WorkTaskForm({
       ? new Date(formData.completed_date)
       : null;
 
+    // Normalize dates to 00:00:00 for accurate comparison (tạo bản sao để tránh mutate)
+    const normalizedStartDate = startDate
+      ? new Date(startDate.getTime())
+      : null;
+    const normalizedDueDate = dueDate ? new Date(dueDate.getTime()) : null;
+    const normalizedCompletedDate = completedDate
+      ? new Date(completedDate.getTime())
+      : null;
+
+    if (normalizedStartDate) {
+      normalizedStartDate.setHours(0, 0, 0, 0);
+    }
+    if (normalizedDueDate) {
+      normalizedDueDate.setHours(0, 0, 0, 0);
+    }
+    if (normalizedCompletedDate) {
+      normalizedCompletedDate.setHours(0, 0, 0, 0);
+    }
+
     // Validation 1: Hạn hoàn thành >= Ngày bắt đầu
-    if (dueDate && startDate) {
-      if (dueDate < startDate) {
+    if (normalizedDueDate && normalizedStartDate) {
+      if (normalizedDueDate < normalizedStartDate) {
         newErrors.due_date =
           "🚫 CẢNH BÁO: Hạn hoàn thành không thể sớm hơn ngày bắt đầu công việc!";
-      } else if (dueDate.getTime() === startDate.getTime()) {
+      } else if (
+        normalizedDueDate.getTime() === normalizedStartDate.getTime()
+      ) {
         newWarnings.due_date =
           "⚡ Lưu ý: Hạn hoàn thành trùng với ngày bắt đầu - công việc cần hoàn thành trong ngày";
       }
     }
 
     // Validation 2: Ngày hoàn thành không được trong tương lai (chống gian lận)
-    if (completedDate) {
-      completedDate.setHours(0, 0, 0, 0);
-      if (completedDate > today) {
+    if (normalizedCompletedDate) {
+      if (normalizedCompletedDate > today) {
         newErrors.completed_date =
           "🚫 GIAN LẬN PHÁT HIỆN: Không thể hoàn thành công việc trong tương lai! Vui lòng chọn ngày hôm nay hoặc trước đó.";
-      } else if (completedDate.getTime() === today.getTime()) {
+      } else if (normalizedCompletedDate.getTime() === today.getTime()) {
         newWarnings.completed_date = "✅ Hoàn thành hôm nay - Tuyệt vời!";
       }
     }
 
     // Validation 3: Ngày hoàn thành >= Ngày bắt đầu
-    if (completedDate && startDate) {
-      if (completedDate < startDate) {
+    if (normalizedCompletedDate && normalizedStartDate) {
+      if (normalizedCompletedDate < normalizedStartDate) {
         newErrors.completed_date =
           "🚫 LỖI LOGIC: Không thể hoàn thành công việc trước khi bắt đầu!";
       }
@@ -279,7 +325,11 @@ export default function WorkTaskForm({
     }
 
     // Additional warnings for better UX
-    if (dueDate && dueDate < today && formData.status !== "hoan_thanh") {
+    if (
+      normalizedDueDate &&
+      normalizedDueDate < today &&
+      formData.status !== "hoan_thanh"
+    ) {
       newWarnings.due_date =
         "⏰ Công việc đã quá hạn! Cần cập nhật trạng thái hoặc gia hạn.";
     }
@@ -514,6 +564,11 @@ export default function WorkTaskForm({
           <Label htmlFor="start_date" className="flex items-center gap-1">
             <Calendar className="h-4 w-4" />
             Ngày bắt đầu
+            {task?.is_assigned && !task?.can_edit_dates && (
+              <span className="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded">
+                Chỉ người giao việc mới có thể chỉnh sửa
+              </span>
+            )}
           </Label>
           <DateInput
             id="start_date"
@@ -522,11 +577,14 @@ export default function WorkTaskForm({
               setFormData({ ...formData, start_date: value })
             }
             placeholder="dd/mm/yyyy"
+            disabled={task?.is_assigned && !task?.can_edit_dates}
             className={
               errors.start_date
                 ? "border-red-500 bg-red-50"
                 : warnings.start_date
                 ? "border-yellow-500 bg-yellow-50"
+                : task?.is_assigned && !task?.can_edit_dates
+                ? "bg-gray-100 cursor-not-allowed"
                 : ""
             }
           />
@@ -548,17 +606,25 @@ export default function WorkTaskForm({
           <Label htmlFor="due_date" className="flex items-center gap-1">
             <Clock className="h-4 w-4" />
             Hạn hoàn thành
+            {task?.is_assigned && !task?.can_edit_dates && (
+              <span className="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded">
+                Chỉ người giao việc mới có thể chỉnh sửa
+              </span>
+            )}
           </Label>
           <DateInput
             id="due_date"
             value={formData.due_date}
             onChange={(value) => setFormData({ ...formData, due_date: value })}
             placeholder="dd/mm/yyyy"
+            disabled={task?.is_assigned && !task?.can_edit_dates}
             className={
               errors.due_date
                 ? "border-red-500 bg-red-50"
                 : warnings.due_date
                 ? "border-yellow-500 bg-yellow-50"
+                : task?.is_assigned && !task?.can_edit_dates
+                ? "bg-gray-100 cursor-not-allowed"
                 : ""
             }
           />
@@ -572,6 +638,13 @@ export default function WorkTaskForm({
             <p className="text-sm text-yellow-600 mt-1 flex items-center gap-1">
               <Clock className="h-3 w-3" />
               {warnings.due_date}
+            </p>
+          )}
+          {task?.is_assigned && !task?.can_edit_dates && (
+            <p className="text-xs text-gray-600 mt-1 flex items-center gap-1">
+              <Shield className="h-3 w-3" />
+              Để thay đổi ngày này, vui lòng sử dụng chức năng "Yêu cầu điều
+              chỉnh"
             </p>
           )}
         </div>
@@ -665,6 +738,231 @@ export default function WorkTaskForm({
         )}
       </div>
 
+      {/* Assignment Section */}
+      <div className="space-y-4 border-t pt-4">
+        <h3 className="text-lg font-medium text-gray-900">
+          Phân công và giám sát
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="assigned_to">Người được giao việc</Label>
+            <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
+              {loadingUsers ? (
+                <p className="text-sm text-gray-500">Đang tải...</p>
+              ) : (
+                users.map((user) => (
+                  <div key={user.id} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`form-assignee-${user.id}`}
+                      checked={formData.assigned_to.includes(user.id)}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        const newAssignedTo = isChecked
+                          ? [...formData.assigned_to, user.id]
+                          : formData.assigned_to.filter((id) => id !== user.id);
+
+                        setFormData({
+                          ...formData,
+                          assigned_to: newAssignedTo,
+                        });
+                      }}
+                      className="rounded border-gray-300"
+                    />
+                    <label
+                      htmlFor={`form-assignee-${user.id}`}
+                      className="text-sm cursor-pointer flex-1">
+                      {user.full_name || user.username} ({user.role})
+                    </label>
+                  </div>
+                ))
+              )}
+            </div>
+            {formData.assigned_to.length > 0 && (
+              <p className="text-sm text-gray-600 mt-1">
+                Đã chọn {formData.assigned_to.length} người
+              </p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor="supervisor">
+              Người giám sát
+              <span className="text-sm text-gray-500 ml-1">(Tùy chọn)</span>
+            </Label>
+            <Select
+              value={formData.supervisor?.toString() || ""}
+              onValueChange={(value) =>
+                setFormData({
+                  ...formData,
+                  supervisor:
+                    value && value !== "none" ? parseInt(value) : undefined,
+                })
+              }>
+              <SelectTrigger>
+                <SelectValue placeholder="Chọn người giám sát" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Không chỉ định</SelectItem>
+                {loadingUsers ? (
+                  <SelectItem value="loading" disabled>
+                    Đang tải...
+                  </SelectItem>
+                ) : (
+                  users.map((user) => (
+                    <SelectItem key={user.id} value={user.id.toString()}>
+                      {user.full_name} ({user.role})
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-500 mt-1">
+              Người giám sát có trách nhiệm đánh giá chất lượng công việc
+            </p>
+          </div>
+        </div>
+
+        {/* Show assignment info if task is assigned */}
+        {task?.is_assigned && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+              <span className="text-sm font-medium text-blue-800">
+                Công việc đã được giao
+              </span>
+            </div>
+            <div className="text-sm text-blue-700 space-y-1">
+              <p>
+                Người giao việc:{" "}
+                <span className="font-medium">{task.assigned_by_name}</span>
+              </p>
+              <p>
+                Người được giao:{" "}
+                <span className="font-medium">
+                  {task.assigned_to_names && task.assigned_to_names.length > 0
+                    ? task.assigned_to_names.join(", ")
+                    : "Chưa giao"}
+                </span>
+              </p>
+              {task.supervisor_name && (
+                <p>
+                  Người giám sát:{" "}
+                  <span className="font-medium">{task.supervisor_name}</span>
+                </p>
+              )}
+              {task.assignment_date && (
+                <p>
+                  Ngày giao việc:{" "}
+                  <span className="font-medium">
+                    {new Date(task.assignment_date).toLocaleDateString("vi-VN")}
+                  </span>
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Show redo info if task is a redo */}
+        {task?.is_redo && (
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+              <span className="text-sm font-medium text-orange-800">
+                Công việc làm lại
+              </span>
+            </div>
+            <div className="text-sm text-orange-700 space-y-1">
+              <p>
+                Làm lại từ:{" "}
+                <span className="font-medium">{task.original_task_title}</span>
+              </p>
+              <p>
+                Lần làm lại thứ:{" "}
+                <span className="font-medium">{task.redo_count}</span>
+              </p>
+              {task.redo_reason && (
+                <p>
+                  Lý do: <span className="font-medium">{task.redo_reason}</span>
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Show evaluation info if task has been evaluated */}
+        {task?.supervisor_rating && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span className="text-sm font-medium text-green-800">
+                Đánh giá chất lượng
+              </span>
+            </div>
+            <div className="text-sm text-green-700 space-y-1">
+              <div className="flex items-center gap-2">
+                <span>Điểm đánh giá:</span>
+                <div className="flex items-center">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <span
+                      key={star}
+                      className={`text-lg ${
+                        star <= task.supervisor_rating!
+                          ? "text-yellow-400"
+                          : "text-gray-300"
+                      }`}>
+                      ★
+                    </span>
+                  ))}
+                  <span className="ml-2 font-medium">
+                    {task.supervisor_rating}/5 sao
+                  </span>
+                </div>
+              </div>
+              {task.supervisor_comment && (
+                <p>
+                  Bình luận:{" "}
+                  <span className="font-medium">{task.supervisor_comment}</span>
+                </p>
+              )}
+              {task.evaluation_date && (
+                <p>
+                  Ngày đánh giá:{" "}
+                  <span className="font-medium">
+                    {new Date(task.evaluation_date).toLocaleDateString("vi-VN")}
+                  </span>
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Show permission info */}
+        {task && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <div className="text-xs text-gray-600 space-y-1">
+              <p>
+                <span className="font-medium">Quyền chỉnh sửa ngày:</span>{" "}
+                {task.can_edit_dates ? (
+                  <span className="text-green-600">✓ Có quyền</span>
+                ) : (
+                  <span className="text-red-600">✗ Không có quyền</span>
+                )}
+              </p>
+              <p>
+                <span className="font-medium">Quyền đánh giá:</span>{" "}
+                {task.can_evaluate ? (
+                  <span className="text-green-600">✓ Có quyền</span>
+                ) : (
+                  <span className="text-red-600">✗ Không có quyền</span>
+                )}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div>
         <Label htmlFor="notes">Ghi chú</Label>
         <Textarea
@@ -702,6 +1000,11 @@ export default function WorkTaskForm({
             <DialogTitle>
               {task ? "Chỉnh sửa công việc" : "Thêm công việc mới"}
             </DialogTitle>
+            <DialogDescription>
+              {task
+                ? "Cập nhật thông tin công việc. Các trường có dấu * là bắt buộc."
+                : "Tạo công việc mới với thông tin chi tiết. Các trường có dấu * là bắt buộc."}
+            </DialogDescription>
           </DialogHeader>
           {formContent}
         </DialogContent>

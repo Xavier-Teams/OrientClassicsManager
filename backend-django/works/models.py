@@ -325,15 +325,13 @@ class WorkTask(models.Model):
         db_index=True
     )
     
-    # Assignment
-    assigned_to = models.ForeignKey(
+    # Assignment and supervision
+    assigned_to = models.ManyToManyField(
         User,
-        on_delete=models.SET_NULL,
-        null=True,
         blank=True,
         related_name='assigned_tasks',
-        verbose_name='Người được giao',
-        db_index=True
+        verbose_name='Người được giao (Assignees)',
+        help_text='Có thể giao cho nhiều người cùng làm'
     )
     created_by = models.ForeignKey(
         User,
@@ -342,6 +340,26 @@ class WorkTask(models.Model):
         blank=True,
         related_name='created_tasks',
         verbose_name='Người tạo'
+    )
+    assigned_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_by_tasks',
+        verbose_name='Người giao việc (Assigner)',
+        help_text='Người có quyền chỉnh sửa ngày bắt đầu và hạn hoàn thành',
+        db_index=True
+    )
+    supervisor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='supervised_tasks',
+        verbose_name='Người giám sát (Supervisor)',
+        help_text='Người có trách nhiệm đánh giá chất lượng công việc',
+        db_index=True
     )
     
     # Status and dates
@@ -356,11 +374,70 @@ class WorkTask(models.Model):
     due_date = models.DateField(null=True, blank=True, verbose_name='Hạn hoàn thành', db_index=True)
     completed_date = models.DateField(null=True, blank=True, verbose_name='Ngày hoàn thành')
     
+    # Assignment tracking
+    is_assigned = models.BooleanField(
+        default=False,
+        verbose_name='Đã được giao việc',
+        help_text='True nếu công việc được giao bởi người khác'
+    )
+    assignment_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Ngày giao việc',
+        help_text='Thời điểm công việc được giao'
+    )
+    
     # Progress
     progress_percent = models.IntegerField(
         default=0,
         validators=[MinValueValidator(0), MaxValueValidator(100)],
         verbose_name='Tiến độ (%)'
+    )
+    
+    # Supervisor evaluation
+    supervisor_rating = models.IntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        verbose_name='Đánh giá chất lượng (1-5 sao)',
+        help_text='Đánh giá của người giám sát về chất lượng công việc'
+    )
+    supervisor_comment = models.TextField(
+        blank=True,
+        verbose_name='Bình luận đánh giá',
+        help_text='Bình luận của người giám sát về chất lượng công việc'
+    )
+    evaluation_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Ngày đánh giá',
+        help_text='Thời điểm người giám sát thực hiện đánh giá'
+    )
+    
+    # Redo functionality
+    is_redo = models.BooleanField(
+        default=False,
+        verbose_name='Là công việc làm lại',
+        help_text='Đánh dấu công việc này là làm lại từ công việc khác'
+    )
+    original_task = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='redo_tasks',
+        verbose_name='Công việc gốc',
+        help_text='Công việc gốc mà công việc này được tạo để làm lại'
+    )
+    redo_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name='Số lần làm lại',
+        help_text='Số lần công việc này đã được yêu cầu làm lại'
+    )
+    redo_reason = models.TextField(
+        blank=True,
+        verbose_name='Lý do làm lại',
+        help_text='Lý do tại sao công việc cần được làm lại'
     )
     
     # Additional info
@@ -378,7 +455,7 @@ class WorkTask(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['work_group', 'status'], name='idx_tasks_group_status'),
-            models.Index(fields=['assigned_to', 'status'], name='idx_tasks_user_status'),
+            # Note: Cannot create index on ManyToManyField 'assigned_to'
             models.Index(fields=['status'], name='idx_tasks_status'),
             models.Index(fields=['due_date'], name='idx_tasks_due_date'),
             models.Index(fields=['is_active'], name='idx_tasks_active'),
@@ -401,6 +478,222 @@ class WorkTask(models.Model):
         if self.due_date and self.status == 'hoan_thanh' and self.completed_date:
             return self.completed_date <= self.due_date
         return False
+    
+    def can_edit_dates(self, user):
+        """Kiểm tra user có quyền chỉnh sửa ngày bắt đầu và hạn hoàn thành không"""
+        if not user or not user.is_authenticated:
+            return False
+        
+        # Nếu công việc được giao (is_assigned=True), chỉ assigner mới có quyền chỉnh sửa
+        if self.is_assigned and self.assigned_by:
+            return user == self.assigned_by
+        
+        # Nếu công việc tự tạo, người tạo có quyền chỉnh sửa
+        if not self.is_assigned:
+            return user == self.created_by or user in self.assigned_to.all()
+        
+        return False
+    
+    def can_evaluate(self, user):
+        """Kiểm tra user có quyền đánh giá công việc không"""
+        if not user or not user.is_authenticated:
+            return False
+        
+        # Chỉ supervisor mới có quyền đánh giá
+        return user == self.supervisor
+    
+    def assign_to_users(self, assignees, assigner, supervisor=None, start_date=None, due_date=None):
+        """Giao việc cho nhiều users"""
+        from django.utils import timezone
+        
+        # Clear existing assignees and add new ones
+        self.assigned_to.clear()
+        if isinstance(assignees, (list, tuple)):
+            self.assigned_to.add(*assignees)
+        else:
+            self.assigned_to.add(assignees)
+            
+        self.assigned_by = assigner
+        self.supervisor = supervisor or assigner  # Nếu không chỉ định supervisor, assigner sẽ là supervisor
+        self.is_assigned = True
+        self.assignment_date = timezone.now()
+        
+        if start_date:
+            self.start_date = start_date
+        if due_date:
+            self.due_date = due_date
+        
+        self.save()
+        
+        # Tạo thông báo cho tất cả assignees
+        for assignee in self.assigned_to.all():
+            self._create_assignment_notification(assignee, assigner)
+    
+    def assign_to_user(self, assignee, assigner, supervisor=None, start_date=None, due_date=None):
+        """Giao việc cho một user (backward compatibility)"""
+        self.assign_to_users([assignee], assigner, supervisor, start_date, due_date)
+    
+    def _create_assignment_notification(self, assignee, assigner):
+        """Tạo thông báo giao việc"""
+        from django.utils import timezone
+        
+        TaskNotification.objects.create(
+            recipient=assignee,
+            sender=assigner,
+            task=self,
+            notification_type='task_assigned',
+            title=f'Bạn được giao việc mới: {self.title}',
+            message=f'''Bạn vừa được giao một công việc mới:
+
+Tên công việc: {self.title}
+Người giao việc: {assigner.full_name}
+Người giám sát: {self.supervisor.full_name if self.supervisor else 'Chưa chỉ định'}
+Ngày bắt đầu: {self.start_date.strftime('%d/%m/%Y') if self.start_date else 'Chưa xác định'}
+Hạn hoàn thành: {self.due_date.strftime('%d/%m/%Y') if self.due_date else 'Chưa xác định'}
+Mức độ ưu tiên: {self.get_priority_display()}
+
+Mô tả: {self.description or 'Không có mô tả'}
+
+Vui lòng kiểm tra và bắt đầu thực hiện công việc.''',
+            extra_data={
+                'task_id': self.id,
+                'assigner_id': assigner.id,
+                'supervisor_id': self.supervisor.id if self.supervisor else None,
+                'start_date': self.start_date.isoformat() if self.start_date else None,
+                'due_date': self.due_date.isoformat() if self.due_date else None,
+            }
+        )
+    
+    def evaluate_work(self, supervisor, rating, comment=''):
+        """Đánh giá công việc bởi supervisor"""
+        from django.utils import timezone
+        
+        if not self.can_evaluate(supervisor):
+            raise ValueError('Bạn không có quyền đánh giá công việc này')
+        
+        if not (1 <= rating <= 5):
+            raise ValueError('Đánh giá phải từ 1 đến 5 sao')
+        
+        self.supervisor_rating = rating
+        self.supervisor_comment = comment
+        self.evaluation_date = timezone.now()
+        self.save(update_fields=['supervisor_rating', 'supervisor_comment', 'evaluation_date'])
+        
+        # Tạo thông báo cho tất cả assignees
+        for assignee in self.assigned_to.all():
+            TaskNotification.objects.create(
+                recipient=assignee,
+                sender=supervisor,
+                task=self,
+                notification_type='evaluation_received',
+                title=f'Nhận đánh giá cho công việc: {self.title}',
+                message=f'''Công việc "{self.title}" của bạn đã được đánh giá:
+
+Người đánh giá: {supervisor.full_name}
+Điểm đánh giá: {rating}/5 sao
+Bình luận: {comment or 'Không có bình luận'}
+
+Ngày đánh giá: {timezone.now().strftime('%d/%m/%Y %H:%M')}''',
+                extra_data={
+                    'task_id': self.id,
+                    'supervisor_id': supervisor.id,
+                    'rating': rating,
+                    'comment': comment,
+                }
+            )
+    
+    def evaluate_task(self, supervisor_user, rating, comment, require_redo=False, redo_reason=""):
+        """Đánh giá công việc và có thể yêu cầu làm lại"""
+        from django.utils import timezone
+        from django.core.exceptions import PermissionDenied
+        
+        if self.supervisor != supervisor_user:
+            raise PermissionDenied("Bạn không có quyền đánh giá công việc này.")
+        if self.status != 'hoan_thanh':
+            raise ValueError("Chỉ có thể đánh giá công việc đã hoàn thành.")
+
+        self.supervisor_rating = rating
+        self.supervisor_comment = comment
+        self.evaluation_date = timezone.now()
+        self.save()
+        
+        if require_redo:
+            # Tạo công việc làm lại
+            redo_task = self.create_redo_task(redo_reason)
+            
+            # Thông báo cho assignee về việc cần làm lại
+            TaskNotification.objects.create(
+                task=redo_task,
+                recipient=self.assigned_to,
+                sender=supervisor_user,
+                notification_type='redo_required',
+                title=f'Yêu cầu làm lại: {self.title}',
+                message=f'Công việc "{self.title}" cần được làm lại. Lý do: {redo_reason}. Một công việc mới đã được tạo với ID #{redo_task.id}.'
+            )
+            return redo_task
+        else:
+            # Thông báo đánh giá bình thường
+            TaskNotification.objects.create(
+                task=self,
+                recipient=self.assigned_to,
+                sender=supervisor_user,
+                notification_type='evaluation',
+                title=f'Đánh giá công việc: {self.title}',
+                message=f'Công việc "{self.title}" của bạn đã được đánh giá {rating} sao. {comment if comment else ""}'
+            )
+            return None
+    
+    def create_redo_task(self, reason=""):
+        """Tạo công việc làm lại từ công việc hiện tại"""
+        from django.utils import timezone
+        
+        # Tính số lần làm lại
+        current_redo_count = self.redo_count + 1
+        
+        # Tạo công việc mới
+        redo_task = WorkTask.objects.create(
+            title=f"{self.title} (Làm lại lần {current_redo_count})",
+            description=self.description,
+            work_group=self.work_group,
+            frequency=self.frequency,
+            priority=self.priority,
+            assigned_by=self.assigned_by,
+            supervisor=self.supervisor,
+            created_by=self.assigned_by,
+            status='chua_bat_dau',
+            is_assigned=True,
+            assignment_date=timezone.now(),
+            is_redo=True,
+            original_task=self,
+            redo_count=current_redo_count,
+            redo_reason=reason,
+            notes=f"Làm lại từ công việc #{self.id}. Lý do: {reason}"
+        )
+        
+        # Gán lại tất cả assignees từ task gốc
+        redo_task.assigned_to.set(self.assigned_to.all())
+        
+        return redo_task
+    
+    def mark_completed_and_notify_supervisor(self, completed_by_user):
+        """Đánh dấu hoàn thành và thông báo cho supervisor"""
+        if self.status != 'hoan_thanh':
+            return
+        
+        if self.supervisor and self.is_assigned:
+            # Lấy danh sách tên của tất cả assignees
+            assignee_names = [user.full_name for user in self.assigned_to.all()]
+            assignee_list = ', '.join(assignee_names)
+            
+            # Thông báo cho supervisor về việc hoàn thành
+            TaskNotification.objects.create(
+                task=self,
+                recipient=self.supervisor,
+                sender=completed_by_user,
+                notification_type='completion_review',
+                title=f'Yêu cầu đánh giá: {self.title}',
+                message=f'Công việc "{self.title}" đã được đánh dấu hoàn thành bởi {completed_by_user.full_name}. Người được giao: {assignee_list}. Vui lòng kiểm tra và đánh giá chất lượng.'
+            )
 
 
 class CustomField(models.Model):
@@ -645,3 +938,206 @@ class ViewPreference(models.Model):
     
     def __str__(self):
         return f"{self.user.full_name if hasattr(self.user, 'full_name') else self.user.username} - {self.get_view_type_display()}"
+
+
+class TaskAssignmentRequest(models.Model):
+    """Yêu cầu điều chỉnh thông tin từ Assignee gửi tới Assigner"""
+    
+    REQUEST_TYPE_CHOICES = [
+        ('start_date', 'Ngày bắt đầu'),
+        ('due_date', 'Hạn hoàn thành'),
+        ('title', 'Tiêu đề công việc'),
+        ('description', 'Mô tả công việc'),
+        ('priority', 'Mức độ ưu tiên'),
+        ('work_group', 'Nhóm công việc'),
+        ('other', 'Khác'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', 'Chờ xử lý'),
+        ('approved', 'Đã chấp nhận'),
+        ('rejected', 'Đã từ chối'),
+        ('cancelled', 'Đã hủy'),
+    ]
+    
+    task = models.ForeignKey(
+        WorkTask,
+        on_delete=models.CASCADE,
+        related_name='assignment_requests',
+        verbose_name='Công việc'
+    )
+    requester = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='sent_assignment_requests',
+        verbose_name='Người yêu cầu (Assignee)'
+    )
+    approver = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='received_assignment_requests',
+        verbose_name='Người xử lý (Assigner)'
+    )
+    
+    request_type = models.CharField(
+        max_length=20,
+        choices=REQUEST_TYPE_CHOICES,
+        verbose_name='Loại yêu cầu'
+    )
+    current_value = models.TextField(
+        blank=True,
+        verbose_name='Giá trị hiện tại',
+        help_text='Giá trị hiện tại của trường cần thay đổi'
+    )
+    requested_value = models.TextField(
+        verbose_name='Giá trị yêu cầu',
+        help_text='Giá trị mới được yêu cầu'
+    )
+    reason = models.TextField(
+        verbose_name='Lý do yêu cầu',
+        help_text='Lý do tại sao cần thay đổi thông tin này'
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        verbose_name='Trạng thái',
+        db_index=True
+    )
+    
+    # Response from approver
+    response_message = models.TextField(
+        blank=True,
+        verbose_name='Phản hồi',
+        help_text='Phản hồi từ người xử lý yêu cầu'
+    )
+    processed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Thời gian xử lý'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Ngày tạo')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Ngày cập nhật')
+    
+    class Meta:
+        db_table = 'task_assignment_requests'
+        verbose_name = 'Yêu cầu điều chỉnh công việc'
+        verbose_name_plural = 'Yêu cầu điều chỉnh công việc'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['task', 'status'], name='idx_assign_req_task_status'),
+            models.Index(fields=['requester', 'status'], name='idx_assign_req_requester_st'),
+            models.Index(fields=['approver', 'status'], name='idx_assign_req_approver_st'),
+            models.Index(fields=['status'], name='idx_assign_req_status'),
+        ]
+    
+    def __str__(self):
+        return f"{self.task.title} - {self.get_request_type_display()} - {self.get_status_display()}"
+
+
+class TaskNotification(models.Model):
+    """Thông báo liên quan đến công việc"""
+    
+    NOTIFICATION_TYPE_CHOICES = [
+        ('task_assigned', 'Được giao việc mới'),
+        ('task_updated', 'Công việc được cập nhật'),
+        ('task_completed', 'Công việc hoàn thành'),
+        ('task_overdue', 'Công việc quá hạn'),
+        ('assignment_request', 'Yêu cầu điều chỉnh'),
+        ('assignment_approved', 'Yêu cầu được chấp nhận'),
+        ('assignment_rejected', 'Yêu cầu bị từ chối'),
+        ('evaluation_received', 'Nhận đánh giá từ supervisor'),
+        ('completion_review', 'Yêu cầu đánh giá hoàn thành'),
+        ('redo_required', 'Yêu cầu làm lại'),
+        ('evaluation', 'Đánh giá'),
+        ('reminder', 'Nhắc nhở'),
+    ]
+    
+    recipient = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        verbose_name='Người nhận'
+    )
+    sender = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sent_notifications',
+        verbose_name='Người gửi'
+    )
+    task = models.ForeignKey(
+        WorkTask,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        verbose_name='Công việc liên quan'
+    )
+    assignment_request = models.ForeignKey(
+        TaskAssignmentRequest,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='notifications',
+        verbose_name='Yêu cầu điều chỉnh liên quan'
+    )
+    
+    notification_type = models.CharField(
+        max_length=30,
+        choices=NOTIFICATION_TYPE_CHOICES,
+        verbose_name='Loại thông báo',
+        db_index=True
+    )
+    title = models.CharField(
+        max_length=200,
+        verbose_name='Tiêu đề thông báo'
+    )
+    message = models.TextField(
+        verbose_name='Nội dung thông báo'
+    )
+    
+    is_read = models.BooleanField(
+        default=False,
+        verbose_name='Đã đọc',
+        db_index=True
+    )
+    read_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Thời gian đọc'
+    )
+    
+    # Additional data as JSON
+    extra_data = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='Dữ liệu bổ sung',
+        help_text='Dữ liệu bổ sung cho thông báo (JSON format)'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Ngày tạo')
+    
+    class Meta:
+        db_table = 'task_notifications'
+        verbose_name = 'Thông báo công việc'
+        verbose_name_plural = 'Thông báo công việc'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['recipient', 'is_read'], name='idx_notif_recipient_read'),
+            models.Index(fields=['task', 'notification_type'], name='idx_notif_task_type'),
+            models.Index(fields=['notification_type'], name='idx_notif_type'),
+            models.Index(fields=['is_read'], name='idx_notif_read'),
+        ]
+    
+    def __str__(self):
+        return f"{self.title} - {self.recipient.full_name}"
+    
+    def mark_as_read(self):
+        """Đánh dấu thông báo đã đọc"""
+        if not self.is_read:
+            from django.utils import timezone
+            self.is_read = True
+            self.read_at = timezone.now()
+            self.save(update_fields=['is_read', 'read_at'])

@@ -21,8 +21,16 @@ class TranslationWorkAdmin(admin.ModelAdmin):
 
 @admin.register(WorkTask)
 class WorkTaskAdmin(admin.ModelAdmin):
-    list_display = ['title', 'work_group', 'assigned_to', 'status', 'priority', 'due_date', 'progress_percent', 'created_at']
-    list_filter = ['work_group', 'status', 'priority', 'frequency', 'assigned_to', 'created_at']
+    list_display = ['title', 'work_group', 'get_assignees', 'status', 'priority', 'due_date', 'progress_percent', 'created_at']
+    list_filter = ['work_group', 'status', 'priority', 'frequency', 'created_at']
     search_fields = ['title', 'description']
     readonly_fields = ['created_at', 'updated_at']
     ordering = ['-created_at']
+    
+    def get_assignees(self, obj):
+        """Hiển thị danh sách assignees"""
+        assignees = obj.assigned_to.all()
+        if assignees:
+            return ', '.join([user.full_name or user.username for user in assignees])
+        return '-'
+    get_assignees.short_description = 'Người được giao'

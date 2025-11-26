@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from .models import (
     TranslationWork, TranslationPart, Stage, WorkTask,
-    CustomField, CustomFieldValue, CustomGroup, ViewPreference
+    CustomField, CustomFieldValue, CustomGroup, ViewPreference,
+    TaskAssignmentRequest, TaskNotification
 )
 
 
@@ -172,26 +173,51 @@ class TranslationWorkSerializer(serializers.ModelSerializer):
 
 class WorkTaskSerializer(serializers.ModelSerializer):
     """Serializer cho WorkTask"""
-    assigned_to_name = serializers.CharField(source='assigned_to.full_name', read_only=True, allow_null=True)
+    assigned_to_names = serializers.SerializerMethodField()  # Changed from assigned_to_name
+    assigned_to_ids = serializers.SerializerMethodField()    # New field for IDs
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, allow_null=True)
+    assigned_by_name = serializers.CharField(source='assigned_by.full_name', read_only=True, allow_null=True)
+    supervisor_name = serializers.CharField(source='supervisor.full_name', read_only=True, allow_null=True)
+    original_task_title = serializers.CharField(source='original_task.title', read_only=True, allow_null=True)
     is_overdue = serializers.ReadOnlyField()
     is_on_time = serializers.ReadOnlyField()
     custom_field_values = serializers.SerializerMethodField()
+    can_edit_dates = serializers.SerializerMethodField()
+    can_evaluate = serializers.SerializerMethodField()
     
     class Meta:
         model = WorkTask
         fields = [
             'id', 'title', 'description',
             'work_group', 'frequency', 'priority',
-            'assigned_to', 'assigned_to_name',
+            'assigned_to', 'assigned_to_names', 'assigned_to_ids',  # Updated fields
             'created_by', 'created_by_name',
+            'assigned_by', 'assigned_by_name',
+            'supervisor', 'supervisor_name',
             'status', 'start_date', 'due_date', 'completed_date',
+            'is_assigned', 'assignment_date',
             'progress_percent', 'notes', 'is_active',
+            'supervisor_rating', 'supervisor_comment', 'evaluation_date',
+            'is_redo', 'original_task', 'original_task_title', 'redo_count', 'redo_reason',
             'is_overdue', 'is_on_time',
+            'can_edit_dates', 'can_evaluate',
             'custom_field_values',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'is_overdue', 'is_on_time']
+        read_only_fields = [
+            'id', 'created_at', 'updated_at', 'is_overdue', 'is_on_time',
+            'can_edit_dates', 'can_evaluate', 'assignment_date', 'evaluation_date',
+            'is_redo', 'original_task', 'original_task_title', 'redo_count', 'redo_reason'
+        ]
+    
+    def get_assigned_to_names(self, obj):
+        """Lấy danh sách tên của assignees"""
+        assignees = obj.assigned_to.all()
+        return [user.full_name or user.username for user in assignees]
+    
+    def get_assigned_to_ids(self, obj):
+        """Lấy danh sách ID của assignees"""
+        return list(obj.assigned_to.values_list('id', flat=True))
     
     def get_custom_field_values(self, obj):
         """Lấy giá trị các custom fields"""
@@ -205,6 +231,20 @@ class WorkTaskSerializer(serializers.ModelSerializer):
             }
             for value in values
         }
+    
+    def get_can_edit_dates(self, obj):
+        """Kiểm tra user hiện tại có thể chỉnh sửa ngày không"""
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            return obj.can_edit_dates(request.user)
+        return False
+    
+    def get_can_evaluate(self, obj):
+        """Kiểm tra user hiện tại có thể đánh giá không"""
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            return obj.can_evaluate(request.user)
+        return False
     
     def validate_completed_date(self, value):
         """
@@ -360,3 +400,132 @@ class ViewPreferenceSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class TaskAssignmentRequestSerializer(serializers.ModelSerializer):
+    """Serializer cho TaskAssignmentRequest"""
+    requester_name = serializers.CharField(source='requester.full_name', read_only=True)
+    approver_name = serializers.CharField(source='approver.full_name', read_only=True)
+    task_title = serializers.CharField(source='task.title', read_only=True)
+    request_type_display = serializers.CharField(source='get_request_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    class Meta:
+        model = TaskAssignmentRequest
+        fields = [
+            'id', 'task', 'task_title',
+            'requester', 'requester_name',
+            'approver', 'approver_name',
+            'request_type', 'request_type_display',
+            'current_value', 'requested_value', 'reason',
+            'status', 'status_display',
+            'response_message', 'processed_at',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'created_at', 'updated_at', 'processed_at',
+            'task_title', 'requester_name', 'approver_name',
+            'request_type_display', 'status_display'
+        ]
+    
+    def validate(self, data):
+        """Validate yêu cầu"""
+        task = data.get('task')
+        requester = data.get('requester')
+        
+        # Kiểm tra requester phải là assignee của task
+        if task and requester and task.assigned_to != requester:
+            raise serializers.ValidationError({
+                'requester': 'Chỉ người được giao việc mới có thể tạo yêu cầu điều chỉnh'
+            })
+        
+        # Kiểm tra task phải được giao (is_assigned=True)
+        if task and not task.is_assigned:
+            raise serializers.ValidationError({
+                'task': 'Chỉ có thể tạo yêu cầu điều chỉnh cho công việc đã được giao'
+            })
+        
+        return data
+
+
+class TaskNotificationSerializer(serializers.ModelSerializer):
+    """Serializer cho TaskNotification"""
+    recipient_name = serializers.CharField(source='recipient.full_name', read_only=True)
+    sender_name = serializers.CharField(source='sender.full_name', read_only=True, allow_null=True)
+    task_title = serializers.CharField(source='task.title', read_only=True)
+    notification_type_display = serializers.CharField(source='get_notification_type_display', read_only=True)
+    assignment_request_id = serializers.IntegerField(source='assignment_request.id', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = TaskNotification
+        fields = [
+            'id', 'recipient', 'recipient_name',
+            'sender', 'sender_name',
+            'task', 'task_title',
+            'assignment_request', 'assignment_request_id',
+            'notification_type', 'notification_type_display',
+            'title', 'message',
+            'is_read', 'read_at',
+            'extra_data', 'created_at'
+        ]
+        read_only_fields = [
+            'id', 'created_at', 'read_at',
+            'recipient_name', 'sender_name', 'task_title',
+            'notification_type_display', 'assignment_request_id'
+        ]
+
+
+class TaskAssignmentSerializer(serializers.Serializer):
+    """Serializer cho việc giao công việc"""
+    assignee_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        help_text='Danh sách ID của những người được giao việc'
+    )
+    supervisor_id = serializers.IntegerField(required=False, allow_null=True, help_text='ID của người giám sát (tùy chọn)')
+    start_date = serializers.DateField(required=False, allow_null=True, help_text='Ngày bắt đầu')
+    due_date = serializers.DateField(required=False, allow_null=True, help_text='Hạn hoàn thành')
+    message = serializers.CharField(required=False, allow_blank=True, help_text='Lời nhắn kèm theo')
+    
+    def validate(self, data):
+        """Validate dữ liệu giao việc"""
+        start_date = data.get('start_date')
+        due_date = data.get('due_date')
+        assignee_ids = data.get('assignee_ids', [])
+        
+        # Kiểm tra có ít nhất một assignee
+        if not assignee_ids:
+            raise serializers.ValidationError({
+                'assignee_ids': 'Phải chọn ít nhất một người để giao việc'
+            })
+        
+        # Kiểm tra ngày bắt đầu <= hạn hoàn thành
+        if start_date and due_date and start_date > due_date:
+            raise serializers.ValidationError({
+                'due_date': 'Hạn hoàn thành phải lớn hơn hoặc bằng ngày bắt đầu'
+            })
+        
+        return data
+
+
+class TaskEvaluationSerializer(serializers.Serializer):
+    """Serializer cho việc đánh giá công việc"""
+    rating = serializers.IntegerField(
+        min_value=1, 
+        max_value=5,
+        help_text='Đánh giá từ 1-5 sao'
+    )
+    comment = serializers.CharField(
+        required=False, 
+        allow_blank=True,
+        help_text='Bình luận đánh giá'
+    )
+    require_redo = serializers.BooleanField(
+        required=False,
+        default=False,
+        help_text='Có yêu cầu làm lại không'
+    )
+    redo_reason = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text='Lý do yêu cầu làm lại'
+    )

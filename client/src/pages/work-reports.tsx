@@ -481,37 +481,37 @@ export default function WorkReports() {
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-purple-400/20 to-pink-600/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
       </div>
 
-      <div className="relative p-6 space-y-6">
+      <div className="relative p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
         {/* Enhanced Header */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 p-8 text-white shadow-2xl">
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 p-4 sm:p-6 lg:p-8 text-white shadow-2xl">
           <div className="absolute inset-0 bg-black/20"></div>
 
-          <div className="relative flex items-center justify-between">
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                  <BarChart3 className="h-6 w-6" />
+          <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 lg:gap-0">
+            <div className="space-y-2 flex-1 min-w-0">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-1.5 sm:p-2 bg-white/20 rounded-lg backdrop-blur-sm flex-shrink-0">
+                  <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
-                <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent truncate">
                   Báo cáo công việc chung
                 </h1>
               </div>
-              <p className="text-blue-100 text-lg">
+              <p className="text-blue-100 text-sm sm:text-base lg:text-lg">
                 Thống kê và phân tích công việc theo nhóm, trạng thái và nhân sự
               </p>
-              <div className="flex items-center gap-2 text-sm text-blue-200">
-                <TrendingUp className="h-4 w-4" />
-                <span>
+              <div className="flex items-center gap-2 text-xs sm:text-sm text-blue-200">
+                <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                <span className="truncate">
                   Cập nhật real-time • {filteredTasks.length} công việc
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 flex-shrink-0">
               <Select
                 value={selectedMonth.toString()}
                 onValueChange={(value) => setSelectedMonth(parseInt(value))}>
-                <SelectTrigger className="w-[140px] bg-white/20 border-white/30 text-white backdrop-blur-sm hover:bg-white/30 transition-all duration-200">
+                <SelectTrigger className="w-full sm:w-[140px] bg-white/20 border-white/30 text-white backdrop-blur-sm hover:bg-white/30 transition-all duration-200">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -525,7 +525,7 @@ export default function WorkReports() {
               <Select
                 value={selectedYear.toString()}
                 onValueChange={(value) => setSelectedYear(parseInt(value))}>
-                <SelectTrigger className="w-[120px] bg-white/20 border-white/30 text-white backdrop-blur-sm hover:bg-white/30 transition-all duration-200">
+                <SelectTrigger className="w-full sm:w-[120px] bg-white/20 border-white/30 text-white backdrop-blur-sm hover:bg-white/30 transition-all duration-200">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -554,7 +554,7 @@ export default function WorkReports() {
             </div>
           </CardHeader>
           <CardContent className="relative space-y-6">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               {/* Total Tasks Card */}
               <Card
                 className="group relative overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100 border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 cursor-pointer"
@@ -683,71 +683,76 @@ export default function WorkReports() {
             </div>
 
             {bc1ChartData.length > 0 && (
-              <div className="relative">
+              <div className="relative overflow-x-auto">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-purple-500/5 to-indigo-500/5 rounded-xl"></div>
-                <ChartContainer
-                  config={{
-                    total: { label: "Tổng số", color: "#8884d8" },
-                    completed: { label: "Hoàn thành", color: "#10b981" },
-                    inProgress: { label: "Đang tiến hành", color: "#3b82f6" },
-                    notCompleted: {
-                      label: "Chưa hoàn thành",
-                      color: "#ef4444",
-                    },
-                    behindSchedule: { label: "Chậm tiến độ", color: "#f97316" },
-                  }}
-                  className="h-[400px] relative z-10">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={bc1ChartData}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                      <defs>
-                        <linearGradient
-                          id="barGradient"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1">
-                          <stop
-                            offset="0%"
-                            stopColor="#3b82f6"
-                            stopOpacity={0.8}
-                          />
-                          <stop
-                            offset="100%"
-                            stopColor="#1e40af"
-                            stopOpacity={0.3}
-                          />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="#e2e8f0"
-                        strokeOpacity={0.5}
-                      />
-                      <XAxis
-                        dataKey="name"
-                        tick={{ fontSize: 12, fill: "#64748b" }}
-                        axisLine={{ stroke: "#e2e8f0" }}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 12, fill: "#64748b" }}
-                        axisLine={{ stroke: "#e2e8f0" }}
-                      />
-                      <ChartTooltip
-                        content={<ChartTooltipContent />}
-                        cursor={{ fill: "rgba(59, 130, 246, 0.1)" }}
-                      />
-                      <Bar
-                        dataKey="value"
-                        fill="url(#barGradient)"
-                        radius={[4, 4, 0, 0]}
-                        animationDuration={1000}
-                        animationBegin={0}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartContainer>
+                <div className="min-w-[500px] w-full">
+                  <ChartContainer
+                    config={{
+                      total: { label: "Tổng số", color: "#8884d8" },
+                      completed: { label: "Hoàn thành", color: "#10b981" },
+                      inProgress: { label: "Đang tiến hành", color: "#3b82f6" },
+                      notCompleted: {
+                        label: "Chưa hoàn thành",
+                        color: "#ef4444",
+                      },
+                      behindSchedule: {
+                        label: "Chậm tiến độ",
+                        color: "#f97316",
+                      },
+                    }}
+                    className="h-[300px] sm:h-[350px] lg:h-[400px] relative z-10">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={bc1ChartData}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                        <defs>
+                          <linearGradient
+                            id="barGradient"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1">
+                            <stop
+                              offset="0%"
+                              stopColor="#3b82f6"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="#1e40af"
+                              stopOpacity={0.3}
+                            />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="#e2e8f0"
+                          strokeOpacity={0.5}
+                        />
+                        <XAxis
+                          dataKey="name"
+                          tick={{ fontSize: 12, fill: "#64748b" }}
+                          axisLine={{ stroke: "#e2e8f0" }}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 12, fill: "#64748b" }}
+                          axisLine={{ stroke: "#e2e8f0" }}
+                        />
+                        <ChartTooltip
+                          content={<ChartTooltipContent />}
+                          cursor={{ fill: "rgba(59, 130, 246, 0.1)" }}
+                        />
+                        <Bar
+                          dataKey="value"
+                          fill="url(#barGradient)"
+                          radius={[4, 4, 0, 0]}
+                          animationDuration={1000}
+                          animationBegin={0}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                </div>
               </div>
             )}
           </CardContent>
@@ -767,7 +772,7 @@ export default function WorkReports() {
             </div>
           </CardHeader>
           <CardContent className="relative space-y-6">
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full"></div>
@@ -842,99 +847,10 @@ export default function WorkReports() {
             </div>
 
             {bc2ChartData.length > 0 && (
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="relative">
+              <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
+                <div className="relative overflow-x-auto">
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-red-500/5 to-orange-500/5 rounded-xl"></div>
-                  <ChartContainer
-                    config={{
-                      "Còn hạn": { label: "Còn hạn", color: "#3b82f6" },
-                      "Quá hạn": { label: "Quá hạn", color: "#ef4444" },
-                    }}
-                    className="h-[350px] relative z-10">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={bc2ChartData}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                        <defs>
-                          <linearGradient
-                            id="onTimeGradient"
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1">
-                            <stop
-                              offset="0%"
-                              stopColor="#3b82f6"
-                              stopOpacity={0.8}
-                            />
-                            <stop
-                              offset="100%"
-                              stopColor="#1e40af"
-                              stopOpacity={0.3}
-                            />
-                          </linearGradient>
-                          <linearGradient
-                            id="overdueGradient"
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1">
-                            <stop
-                              offset="0%"
-                              stopColor="#ef4444"
-                              stopOpacity={0.8}
-                            />
-                            <stop
-                              offset="100%"
-                              stopColor="#dc2626"
-                              stopOpacity={0.3}
-                            />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          stroke="#e2e8f0"
-                          strokeOpacity={0.5}
-                        />
-                        <XAxis
-                          dataKey="name"
-                          tick={{ fontSize: 11, fill: "#64748b" }}
-                          axisLine={{ stroke: "#e2e8f0" }}
-                          angle={-45}
-                          textAnchor="end"
-                          height={80}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 12, fill: "#64748b" }}
-                          axisLine={{ stroke: "#e2e8f0" }}
-                        />
-                        <ChartTooltip
-                          content={<ChartTooltipContent />}
-                          cursor={{ fill: "rgba(59, 130, 246, 0.1)" }}
-                        />
-                        <Legend />
-                        <Bar
-                          dataKey="Còn hạn"
-                          fill="url(#onTimeGradient)"
-                          radius={[4, 4, 0, 0]}
-                          animationDuration={1200}
-                          animationBegin={0}
-                        />
-                        <Bar
-                          dataKey="Quá hạn"
-                          fill="url(#overdueGradient)"
-                          radius={[4, 4, 0, 0]}
-                          animationDuration={1200}
-                          animationBegin={200}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </ChartContainer>
-                </div>
-
-                {bc2PieData.length > 0 && (
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-red-500/5 rounded-xl"></div>
+                  <div className="min-w-[400px] w-full">
                     <ChartContainer
                       config={{
                         "Còn hạn": { label: "Còn hạn", color: "#3b82f6" },
@@ -942,66 +858,159 @@ export default function WorkReports() {
                       }}
                       className="h-[350px] relative z-10">
                       <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
+                        <BarChart
+                          data={bc2ChartData}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                           <defs>
                             <linearGradient
-                              id="pieOnTime"
+                              id="onTimeGradient"
                               x1="0"
                               y1="0"
-                              x2="1"
+                              x2="0"
                               y2="1">
-                              <stop offset="0%" stopColor="#60a5fa" />
-                              <stop offset="100%" stopColor="#3b82f6" />
+                              <stop
+                                offset="0%"
+                                stopColor="#3b82f6"
+                                stopOpacity={0.8}
+                              />
+                              <stop
+                                offset="100%"
+                                stopColor="#1e40af"
+                                stopOpacity={0.3}
+                              />
                             </linearGradient>
                             <linearGradient
-                              id="pieOverdue"
+                              id="overdueGradient"
                               x1="0"
                               y1="0"
-                              x2="1"
+                              x2="0"
                               y2="1">
-                              <stop offset="0%" stopColor="#f87171" />
-                              <stop offset="100%" stopColor="#ef4444" />
+                              <stop
+                                offset="0%"
+                                stopColor="#ef4444"
+                                stopOpacity={0.8}
+                              />
+                              <stop
+                                offset="100%"
+                                stopColor="#dc2626"
+                                stopOpacity={0.3}
+                              />
                             </linearGradient>
                           </defs>
-                          <Pie
-                            data={bc2PieData}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            label={({ name, percent }) =>
-                              `${name}: ${(percent * 100).toFixed(0)}%`
-                            }
-                            outerRadius={100}
-                            innerRadius={40}
-                            fill="#8884d8"
-                            dataKey="value"
-                            animationDuration={1500}
-                            animationBegin={0}>
-                            {bc2PieData.map((entry, index) => (
-                              <Cell
-                                key={`cell-${index}`}
-                                fill={
-                                  entry.name === "Còn hạn"
-                                    ? "url(#pieOnTime)"
-                                    : "url(#pieOverdue)"
-                                }
-                                stroke="#fff"
-                                strokeWidth={2}
-                              />
-                            ))}
-                          </Pie>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="#e2e8f0"
+                            strokeOpacity={0.5}
+                          />
+                          <XAxis
+                            dataKey="name"
+                            tick={{ fontSize: 11, fill: "#64748b" }}
+                            axisLine={{ stroke: "#e2e8f0" }}
+                            angle={-45}
+                            textAnchor="end"
+                            height={80}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 12, fill: "#64748b" }}
+                            axisLine={{ stroke: "#e2e8f0" }}
+                          />
                           <ChartTooltip
                             content={<ChartTooltipContent />}
-                            contentStyle={{
-                              backgroundColor: "rgba(255, 255, 255, 0.95)",
-                              border: "none",
-                              borderRadius: "8px",
-                              boxShadow: "0 10px 25px rgba(0, 0, 0, 0.1)",
-                            }}
+                            cursor={{ fill: "rgba(59, 130, 246, 0.1)" }}
                           />
-                        </PieChart>
+                          <Legend />
+                          <Bar
+                            dataKey="Còn hạn"
+                            fill="url(#onTimeGradient)"
+                            radius={[4, 4, 0, 0]}
+                            animationDuration={1200}
+                            animationBegin={0}
+                          />
+                          <Bar
+                            dataKey="Quá hạn"
+                            fill="url(#overdueGradient)"
+                            radius={[4, 4, 0, 0]}
+                            animationDuration={1200}
+                            animationBegin={200}
+                          />
+                        </BarChart>
                       </ResponsiveContainer>
                     </ChartContainer>
+                  </div>
+                </div>
+
+                {bc2PieData.length > 0 && (
+                  <div className="relative overflow-x-auto">
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-red-500/5 rounded-xl"></div>
+                    <div className="min-w-[350px] w-full">
+                      <ChartContainer
+                        config={{
+                          "Còn hạn": { label: "Còn hạn", color: "#3b82f6" },
+                          "Quá hạn": { label: "Quá hạn", color: "#ef4444" },
+                        }}
+                        className="h-[350px] relative z-10">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <defs>
+                              <linearGradient
+                                id="pieOnTime"
+                                x1="0"
+                                y1="0"
+                                x2="1"
+                                y2="1">
+                                <stop offset="0%" stopColor="#60a5fa" />
+                                <stop offset="100%" stopColor="#3b82f6" />
+                              </linearGradient>
+                              <linearGradient
+                                id="pieOverdue"
+                                x1="0"
+                                y1="0"
+                                x2="1"
+                                y2="1">
+                                <stop offset="0%" stopColor="#f87171" />
+                                <stop offset="100%" stopColor="#ef4444" />
+                              </linearGradient>
+                            </defs>
+                            <Pie
+                              data={bc2PieData}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percent }) =>
+                                `${name}: ${(percent * 100).toFixed(0)}%`
+                              }
+                              outerRadius={100}
+                              innerRadius={40}
+                              fill="#8884d8"
+                              dataKey="value"
+                              animationDuration={1500}
+                              animationBegin={0}>
+                              {bc2PieData.map((entry, index) => (
+                                <Cell
+                                  key={`cell-${index}`}
+                                  fill={
+                                    entry.name === "Còn hạn"
+                                      ? "url(#pieOnTime)"
+                                      : "url(#pieOverdue)"
+                                  }
+                                  stroke="#fff"
+                                  strokeWidth={2}
+                                />
+                              ))}
+                            </Pie>
+                            <ChartTooltip
+                              content={<ChartTooltipContent />}
+                              contentStyle={{
+                                backgroundColor: "rgba(255, 255, 255, 0.95)",
+                                border: "none",
+                                borderRadius: "8px",
+                                boxShadow: "0 10px 25px rgba(0, 0, 0, 0.1)",
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </ChartContainer>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1132,130 +1141,10 @@ export default function WorkReports() {
             </div>
 
             {bc3ChartData.length > 0 && (
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="relative">
+              <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
+                <div className="relative overflow-x-auto">
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-green-500/5 to-orange-500/5 rounded-xl"></div>
-                  <ChartContainer
-                    config={{
-                      "Đúng tiến độ": {
-                        label: "Đúng tiến độ",
-                        color: "#3b82f6",
-                      },
-                      "Trước hạn": { label: "Trước hạn", color: "#10b981" },
-                      "Chậm tiến độ": {
-                        label: "Chậm tiến độ",
-                        color: "#f97316",
-                      },
-                    }}
-                    className="h-[350px] relative z-10">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={bc3ChartData}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                        <defs>
-                          <linearGradient
-                            id="onTimeGradientBC3"
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1">
-                            <stop
-                              offset="0%"
-                              stopColor="#3b82f6"
-                              stopOpacity={0.8}
-                            />
-                            <stop
-                              offset="100%"
-                              stopColor="#1e40af"
-                              stopOpacity={0.3}
-                            />
-                          </linearGradient>
-                          <linearGradient
-                            id="earlyGradient"
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1">
-                            <stop
-                              offset="0%"
-                              stopColor="#10b981"
-                              stopOpacity={0.8}
-                            />
-                            <stop
-                              offset="100%"
-                              stopColor="#059669"
-                              stopOpacity={0.3}
-                            />
-                          </linearGradient>
-                          <linearGradient
-                            id="lateGradient"
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1">
-                            <stop
-                              offset="0%"
-                              stopColor="#f97316"
-                              stopOpacity={0.8}
-                            />
-                            <stop
-                              offset="100%"
-                              stopColor="#ea580c"
-                              stopOpacity={0.3}
-                            />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          stroke="#e2e8f0"
-                          strokeOpacity={0.5}
-                        />
-                        <XAxis
-                          dataKey="name"
-                          tick={{ fontSize: 11, fill: "#64748b" }}
-                          axisLine={{ stroke: "#e2e8f0" }}
-                          angle={-45}
-                          textAnchor="end"
-                          height={80}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 12, fill: "#64748b" }}
-                          axisLine={{ stroke: "#e2e8f0" }}
-                        />
-                        <ChartTooltip
-                          content={<ChartTooltipContent />}
-                          cursor={{ fill: "rgba(59, 130, 246, 0.1)" }}
-                        />
-                        <Legend />
-                        <Bar
-                          dataKey="Đúng tiến độ"
-                          fill="url(#onTimeGradientBC3)"
-                          radius={[4, 4, 0, 0]}
-                          animationDuration={1200}
-                          animationBegin={0}
-                        />
-                        <Bar
-                          dataKey="Trước hạn"
-                          fill="url(#earlyGradient)"
-                          radius={[4, 4, 0, 0]}
-                          animationDuration={1200}
-                          animationBegin={200}
-                        />
-                        <Bar
-                          dataKey="Chậm tiến độ"
-                          fill="url(#lateGradient)"
-                          radius={[4, 4, 0, 0]}
-                          animationDuration={1200}
-                          animationBegin={400}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </ChartContainer>
-                </div>
-
-                {bc3PieData.length > 0 && (
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-green-500/5 to-orange-500/5 rounded-xl"></div>
+                  <div className="min-w-[400px] w-full">
                     <ChartContainer
                       config={{
                         "Đúng tiến độ": {
@@ -1270,79 +1159,203 @@ export default function WorkReports() {
                       }}
                       className="h-[350px] relative z-10">
                       <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
+                        <BarChart
+                          data={bc3ChartData}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                           <defs>
                             <linearGradient
-                              id="pieOnTimeBC3"
+                              id="onTimeGradientBC3"
                               x1="0"
                               y1="0"
-                              x2="1"
+                              x2="0"
                               y2="1">
-                              <stop offset="0%" stopColor="#60a5fa" />
-                              <stop offset="100%" stopColor="#3b82f6" />
+                              <stop
+                                offset="0%"
+                                stopColor="#3b82f6"
+                                stopOpacity={0.8}
+                              />
+                              <stop
+                                offset="100%"
+                                stopColor="#1e40af"
+                                stopOpacity={0.3}
+                              />
                             </linearGradient>
                             <linearGradient
-                              id="pieEarly"
+                              id="earlyGradient"
                               x1="0"
                               y1="0"
-                              x2="1"
+                              x2="0"
                               y2="1">
-                              <stop offset="0%" stopColor="#34d399" />
-                              <stop offset="100%" stopColor="#10b981" />
+                              <stop
+                                offset="0%"
+                                stopColor="#10b981"
+                                stopOpacity={0.8}
+                              />
+                              <stop
+                                offset="100%"
+                                stopColor="#059669"
+                                stopOpacity={0.3}
+                              />
                             </linearGradient>
                             <linearGradient
-                              id="pieLate"
+                              id="lateGradient"
                               x1="0"
                               y1="0"
-                              x2="1"
+                              x2="0"
                               y2="1">
-                              <stop offset="0%" stopColor="#fb923c" />
-                              <stop offset="100%" stopColor="#f97316" />
+                              <stop
+                                offset="0%"
+                                stopColor="#f97316"
+                                stopOpacity={0.8}
+                              />
+                              <stop
+                                offset="100%"
+                                stopColor="#ea580c"
+                                stopOpacity={0.3}
+                              />
                             </linearGradient>
                           </defs>
-                          <Pie
-                            data={bc3PieData}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            label={({ name, percent }) =>
-                              `${name}: ${(percent * 100).toFixed(0)}%`
-                            }
-                            outerRadius={100}
-                            innerRadius={40}
-                            fill="#8884d8"
-                            dataKey="value"
-                            animationDuration={1500}
-                            animationBegin={0}>
-                            {bc3PieData.map((entry, index) => {
-                              let fillColor = "url(#pieOnTimeBC3)";
-                              if (entry.name === "Trước hạn")
-                                fillColor = "url(#pieEarly)";
-                              if (entry.name === "Chậm tiến độ")
-                                fillColor = "url(#pieLate)";
-
-                              return (
-                                <Cell
-                                  key={`cell-${index}`}
-                                  fill={fillColor}
-                                  stroke="#fff"
-                                  strokeWidth={2}
-                                />
-                              );
-                            })}
-                          </Pie>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="#e2e8f0"
+                            strokeOpacity={0.5}
+                          />
+                          <XAxis
+                            dataKey="name"
+                            tick={{ fontSize: 11, fill: "#64748b" }}
+                            axisLine={{ stroke: "#e2e8f0" }}
+                            angle={-45}
+                            textAnchor="end"
+                            height={80}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 12, fill: "#64748b" }}
+                            axisLine={{ stroke: "#e2e8f0" }}
+                          />
                           <ChartTooltip
                             content={<ChartTooltipContent />}
-                            contentStyle={{
-                              backgroundColor: "rgba(255, 255, 255, 0.95)",
-                              border: "none",
-                              borderRadius: "8px",
-                              boxShadow: "0 10px 25px rgba(0, 0, 0, 0.1)",
-                            }}
+                            cursor={{ fill: "rgba(59, 130, 246, 0.1)" }}
                           />
-                        </PieChart>
+                          <Legend />
+                          <Bar
+                            dataKey="Đúng tiến độ"
+                            fill="url(#onTimeGradientBC3)"
+                            radius={[4, 4, 0, 0]}
+                            animationDuration={1200}
+                            animationBegin={0}
+                          />
+                          <Bar
+                            dataKey="Trước hạn"
+                            fill="url(#earlyGradient)"
+                            radius={[4, 4, 0, 0]}
+                            animationDuration={1200}
+                            animationBegin={200}
+                          />
+                          <Bar
+                            dataKey="Chậm tiến độ"
+                            fill="url(#lateGradient)"
+                            radius={[4, 4, 0, 0]}
+                            animationDuration={1200}
+                            animationBegin={400}
+                          />
+                        </BarChart>
                       </ResponsiveContainer>
                     </ChartContainer>
+                  </div>
+                </div>
+
+                {bc3PieData.length > 0 && (
+                  <div className="relative overflow-x-auto">
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-green-500/5 to-orange-500/5 rounded-xl"></div>
+                    <div className="min-w-[350px] w-full">
+                      <ChartContainer
+                        config={{
+                          "Đúng tiến độ": {
+                            label: "Đúng tiến độ",
+                            color: "#3b82f6",
+                          },
+                          "Trước hạn": { label: "Trước hạn", color: "#10b981" },
+                          "Chậm tiến độ": {
+                            label: "Chậm tiến độ",
+                            color: "#f97316",
+                          },
+                        }}
+                        className="h-[350px] relative z-10">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <defs>
+                              <linearGradient
+                                id="pieOnTimeBC3"
+                                x1="0"
+                                y1="0"
+                                x2="1"
+                                y2="1">
+                                <stop offset="0%" stopColor="#60a5fa" />
+                                <stop offset="100%" stopColor="#3b82f6" />
+                              </linearGradient>
+                              <linearGradient
+                                id="pieEarly"
+                                x1="0"
+                                y1="0"
+                                x2="1"
+                                y2="1">
+                                <stop offset="0%" stopColor="#34d399" />
+                                <stop offset="100%" stopColor="#10b981" />
+                              </linearGradient>
+                              <linearGradient
+                                id="pieLate"
+                                x1="0"
+                                y1="0"
+                                x2="1"
+                                y2="1">
+                                <stop offset="0%" stopColor="#fb923c" />
+                                <stop offset="100%" stopColor="#f97316" />
+                              </linearGradient>
+                            </defs>
+                            <Pie
+                              data={bc3PieData}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percent }) =>
+                                `${name}: ${(percent * 100).toFixed(0)}%`
+                              }
+                              outerRadius={100}
+                              innerRadius={40}
+                              fill="#8884d8"
+                              dataKey="value"
+                              animationDuration={1500}
+                              animationBegin={0}>
+                              {bc3PieData.map((entry, index) => {
+                                let fillColor = "url(#pieOnTimeBC3)";
+                                if (entry.name === "Trước hạn")
+                                  fillColor = "url(#pieEarly)";
+                                if (entry.name === "Chậm tiến độ")
+                                  fillColor = "url(#pieLate)";
+
+                                return (
+                                  <Cell
+                                    key={`cell-${index}`}
+                                    fill={fillColor}
+                                    stroke="#fff"
+                                    strokeWidth={2}
+                                  />
+                                );
+                              })}
+                            </Pie>
+                            <ChartTooltip
+                              content={<ChartTooltipContent />}
+                              contentStyle={{
+                                backgroundColor: "rgba(255, 255, 255, 0.95)",
+                                border: "none",
+                                borderRadius: "8px",
+                                boxShadow: "0 10px 25px rgba(0, 0, 0, 0.1)",
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </ChartContainer>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1372,7 +1385,7 @@ export default function WorkReports() {
 
             {/* Trend Filters */}
             <div className="mt-6 space-y-4">
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 sm:gap-3">
                 <Button
                   variant={trendFilter === "total" ? "default" : "outline"}
                   size="sm"
@@ -1414,7 +1427,7 @@ export default function WorkReports() {
                   <p className="text-sm font-medium text-gray-700">
                     Chọn nhóm công việc:
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 sm:gap-3">
                     {Object.entries(WORK_GROUP_LABELS).map(([key, label]) => (
                       <Button
                         key={key}
@@ -1449,7 +1462,7 @@ export default function WorkReports() {
                   <p className="text-sm font-medium text-gray-700">
                     Chọn trạng thái:
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 sm:gap-3">
                     {[
                       { key: "hoan_thanh", label: "Hoàn thành" },
                       { key: "dang_tien_hanh", label: "Đang tiến hành" },
@@ -1485,220 +1498,222 @@ export default function WorkReports() {
 
           <CardContent className="relative z-10">
             {trendData.length > 0 && (
-              <div className="relative">
+              <div className="relative overflow-x-auto">
                 <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 rounded-xl"></div>
-                <ChartContainer
-                  config={{
-                    total: { label: "Tổng số", color: "#6366f1" },
-                  }}
-                  className="h-[400px] relative z-10">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={trendData}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                      <defs>
-                        <linearGradient
-                          id="lineGradient1"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1">
-                          <stop
-                            offset="0%"
-                            stopColor="#6366f1"
-                            stopOpacity={0.8}
-                          />
-                          <stop
-                            offset="100%"
-                            stopColor="#6366f1"
-                            stopOpacity={0.1}
-                          />
-                        </linearGradient>
-                        <linearGradient
-                          id="lineGradient2"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1">
-                          <stop
-                            offset="0%"
-                            stopColor="#8b5cf6"
-                            stopOpacity={0.8}
-                          />
-                          <stop
-                            offset="100%"
-                            stopColor="#8b5cf6"
-                            stopOpacity={0.1}
-                          />
-                        </linearGradient>
-                        <linearGradient
-                          id="lineGradient3"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1">
-                          <stop
-                            offset="0%"
-                            stopColor="#06b6d4"
-                            stopOpacity={0.8}
-                          />
-                          <stop
-                            offset="100%"
-                            stopColor="#06b6d4"
-                            stopOpacity={0.1}
-                          />
-                        </linearGradient>
-                        <linearGradient
-                          id="lineGradient4"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1">
-                          <stop
-                            offset="0%"
-                            stopColor="#10b981"
-                            stopOpacity={0.8}
-                          />
-                          <stop
-                            offset="100%"
-                            stopColor="#10b981"
-                            stopOpacity={0.1}
-                          />
-                        </linearGradient>
-                        <linearGradient
-                          id="lineGradient5"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1">
-                          <stop
-                            offset="0%"
-                            stopColor="#f59e0b"
-                            stopOpacity={0.8}
-                          />
-                          <stop
-                            offset="100%"
-                            stopColor="#f59e0b"
-                            stopOpacity={0.1}
-                          />
-                        </linearGradient>
-                      </defs>
+                <div className="min-w-[600px] w-full">
+                  <ChartContainer
+                    config={{
+                      total: { label: "Tổng số", color: "#6366f1" },
+                    }}
+                    className="h-[300px] sm:h-[350px] lg:h-[400px] relative z-10">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={trendData}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                        <defs>
+                          <linearGradient
+                            id="lineGradient1"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1">
+                            <stop
+                              offset="0%"
+                              stopColor="#6366f1"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="#6366f1"
+                              stopOpacity={0.1}
+                            />
+                          </linearGradient>
+                          <linearGradient
+                            id="lineGradient2"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1">
+                            <stop
+                              offset="0%"
+                              stopColor="#8b5cf6"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="#8b5cf6"
+                              stopOpacity={0.1}
+                            />
+                          </linearGradient>
+                          <linearGradient
+                            id="lineGradient3"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1">
+                            <stop
+                              offset="0%"
+                              stopColor="#06b6d4"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="#06b6d4"
+                              stopOpacity={0.1}
+                            />
+                          </linearGradient>
+                          <linearGradient
+                            id="lineGradient4"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1">
+                            <stop
+                              offset="0%"
+                              stopColor="#10b981"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="#10b981"
+                              stopOpacity={0.1}
+                            />
+                          </linearGradient>
+                          <linearGradient
+                            id="lineGradient5"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1">
+                            <stop
+                              offset="0%"
+                              stopColor="#f59e0b"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="#f59e0b"
+                              stopOpacity={0.1}
+                            />
+                          </linearGradient>
+                        </defs>
 
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="#e2e8f0"
-                        strokeOpacity={0.5}
-                      />
-                      <XAxis
-                        dataKey="month"
-                        tick={{ fontSize: 12, fill: "#64748b" }}
-                        axisLine={{ stroke: "#e2e8f0" }}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 12, fill: "#64748b" }}
-                        axisLine={{ stroke: "#e2e8f0" }}
-                      />
-                      <ChartTooltip
-                        content={<ChartTooltipContent />}
-                        cursor={{ fill: "rgba(99, 102, 241, 0.1)" }}
-                      />
-                      <Legend />
-
-                      {trendFilter === "total" && (
-                        <Line
-                          type="monotone"
-                          dataKey="total"
-                          stroke="#6366f1"
-                          strokeWidth={3}
-                          dot={{ fill: "#6366f1", strokeWidth: 2, r: 5 }}
-                          activeDot={{
-                            r: 7,
-                            stroke: "#6366f1",
-                            strokeWidth: 2,
-                            fill: "#ffffff",
-                          }}
-                          animationDuration={1500}
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="#e2e8f0"
+                          strokeOpacity={0.5}
                         />
-                      )}
+                        <XAxis
+                          dataKey="month"
+                          tick={{ fontSize: 12, fill: "#64748b" }}
+                          axisLine={{ stroke: "#e2e8f0" }}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 12, fill: "#64748b" }}
+                          axisLine={{ stroke: "#e2e8f0" }}
+                        />
+                        <ChartTooltip
+                          content={<ChartTooltipContent />}
+                          cursor={{ fill: "rgba(99, 102, 241, 0.1)" }}
+                        />
+                        <Legend />
 
-                      {trendFilter === "work_group" &&
-                        selectedWorkGroups.map((group, index) => {
-                          const colors = [
-                            "#6366f1",
-                            "#8b5cf6",
-                            "#06b6d4",
-                            "#10b981",
-                            "#f59e0b",
-                          ];
-                          const color = colors[index % colors.length];
-                          return (
-                            <Line
-                              key={group}
-                              type="monotone"
-                              dataKey={WORK_GROUP_LABELS[group] || group}
-                              stroke={color}
-                              strokeWidth={2}
-                              dot={{ fill: color, strokeWidth: 1, r: 4 }}
-                              activeDot={{
-                                r: 6,
-                                stroke: color,
-                                strokeWidth: 2,
-                                fill: "#ffffff",
-                              }}
-                              animationDuration={1500}
-                              animationBegin={index * 200}
-                            />
-                          );
-                        })}
+                        {trendFilter === "total" && (
+                          <Line
+                            type="monotone"
+                            dataKey="total"
+                            stroke="#6366f1"
+                            strokeWidth={3}
+                            dot={{ fill: "#6366f1", strokeWidth: 2, r: 5 }}
+                            activeDot={{
+                              r: 7,
+                              stroke: "#6366f1",
+                              strokeWidth: 2,
+                              fill: "#ffffff",
+                            }}
+                            animationDuration={1500}
+                          />
+                        )}
 
-                      {trendFilter === "status" &&
-                        selectedStatuses.map((status, index) => {
-                          const statusMap = {
-                            hoan_thanh: {
-                              color: "#10b981",
-                              label: "Hoàn thành",
-                            },
-                            dang_tien_hanh: {
-                              color: "#3b82f6",
-                              label: "Đang tiến hành",
-                            },
-                            cham_tien_do: {
-                              color: "#f59e0b",
-                              label: "Chậm tiến độ",
-                            },
-                            khong_hoan_thanh: {
-                              color: "#ef4444",
-                              label: "Không hoàn thành",
-                            },
-                          };
-                          const statusInfo =
-                            statusMap[status as keyof typeof statusMap];
-                          return (
-                            <Line
-                              key={status}
-                              type="monotone"
-                              dataKey={statusInfo.label}
-                              stroke={statusInfo.color}
-                              strokeWidth={2}
-                              dot={{
-                                fill: statusInfo.color,
-                                strokeWidth: 1,
-                                r: 4,
-                              }}
-                              activeDot={{
-                                r: 6,
-                                stroke: statusInfo.color,
-                                strokeWidth: 2,
-                                fill: "#ffffff",
-                              }}
-                              animationDuration={1500}
-                              animationBegin={index * 200}
-                            />
-                          );
-                        })}
-                    </LineChart>
-                  </ResponsiveContainer>
-                </ChartContainer>
+                        {trendFilter === "work_group" &&
+                          selectedWorkGroups.map((group, index) => {
+                            const colors = [
+                              "#6366f1",
+                              "#8b5cf6",
+                              "#06b6d4",
+                              "#10b981",
+                              "#f59e0b",
+                            ];
+                            const color = colors[index % colors.length];
+                            return (
+                              <Line
+                                key={group}
+                                type="monotone"
+                                dataKey={WORK_GROUP_LABELS[group] || group}
+                                stroke={color}
+                                strokeWidth={2}
+                                dot={{ fill: color, strokeWidth: 1, r: 4 }}
+                                activeDot={{
+                                  r: 6,
+                                  stroke: color,
+                                  strokeWidth: 2,
+                                  fill: "#ffffff",
+                                }}
+                                animationDuration={1500}
+                                animationBegin={index * 200}
+                              />
+                            );
+                          })}
+
+                        {trendFilter === "status" &&
+                          selectedStatuses.map((status, index) => {
+                            const statusMap = {
+                              hoan_thanh: {
+                                color: "#10b981",
+                                label: "Hoàn thành",
+                              },
+                              dang_tien_hanh: {
+                                color: "#3b82f6",
+                                label: "Đang tiến hành",
+                              },
+                              cham_tien_do: {
+                                color: "#f59e0b",
+                                label: "Chậm tiến độ",
+                              },
+                              khong_hoan_thanh: {
+                                color: "#ef4444",
+                                label: "Không hoàn thành",
+                              },
+                            };
+                            const statusInfo =
+                              statusMap[status as keyof typeof statusMap];
+                            return (
+                              <Line
+                                key={status}
+                                type="monotone"
+                                dataKey={statusInfo.label}
+                                stroke={statusInfo.color}
+                                strokeWidth={2}
+                                dot={{
+                                  fill: statusInfo.color,
+                                  strokeWidth: 1,
+                                  r: 4,
+                                }}
+                                activeDot={{
+                                  r: 6,
+                                  stroke: statusInfo.color,
+                                  strokeWidth: 2,
+                                  fill: "#ffffff",
+                                }}
+                                animationDuration={1500}
+                                animationBegin={index * 200}
+                              />
+                            );
+                          })}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                </div>
               </div>
             )}
           </CardContent>

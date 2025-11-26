@@ -10,13 +10,17 @@ from .views import (
     CustomFieldViewSet,
     CustomFieldValueViewSet,
     CustomGroupViewSet,
-    ViewPreferenceViewSet
+    ViewPreferenceViewSet,
+    TaskAssignmentRequestViewSet,
+    TaskNotificationViewSet
 )
 
 router = DefaultRouter()
 router.register(r'parts', TranslationPartViewSet, basename='part')
 router.register(r'stages', StageViewSet, basename='stage')
 router.register(r'tasks', WorkTaskViewSet, basename='task')
+router.register(r'assignment-requests', TaskAssignmentRequestViewSet, basename='assignment-request')
+router.register(r'notifications', TaskNotificationViewSet, basename='notification')
 router.register(r'custom-fields', CustomFieldViewSet, basename='custom-field')
 router.register(r'custom-field-values', CustomFieldValueViewSet, basename='custom-field-value')
 router.register(r'custom-groups', CustomGroupViewSet, basename='custom-group')

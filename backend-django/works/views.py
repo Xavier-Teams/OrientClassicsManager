@@ -9,7 +9,8 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from .models import (
     TranslationWork, TranslationPart, Stage, WorkTask,
-    CustomField, CustomFieldValue, CustomGroup, ViewPreference
+    CustomField, CustomFieldValue, CustomGroup, ViewPreference,
+    TaskAssignmentRequest, TaskNotification
 )
 from .serializers import (
     TranslationWorkSerializer,
@@ -20,7 +21,11 @@ from .serializers import (
     CustomFieldSerializer,
     CustomFieldValueSerializer,
     CustomGroupSerializer,
-    ViewPreferenceSerializer
+    ViewPreferenceSerializer,
+    TaskAssignmentRequestSerializer,
+    TaskNotificationSerializer,
+    TaskAssignmentSerializer,
+    TaskEvaluationSerializer
 )
 from .permissions import WorkPermission, WorkReportPermission
 
@@ -286,6 +291,177 @@ class WorkTaskViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(priority=priority)
         
         return queryset
+    
+    @action(detail=True, methods=['post'])
+    def assign_task(self, request, pk=None):
+        """Giao việc cho người khác"""
+        task = self.get_object()
+        serializer = TaskAssignmentSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            try:
+                from users.models import User
+                
+                assignee_ids = serializer.validated_data['assignee_ids']
+                supervisor_id = serializer.validated_data.get('supervisor_id')
+                start_date = serializer.validated_data.get('start_date')
+                due_date = serializer.validated_data.get('due_date')
+                
+                # Lấy user objects
+                assignees = User.objects.filter(id__in=assignee_ids, active=True)
+                if len(assignees) != len(assignee_ids):
+                    return Response({
+                        'error': 'Một hoặc nhiều người được giao không tồn tại hoặc không hoạt động'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                supervisor = None
+                if supervisor_id:
+                    supervisor = User.objects.get(id=supervisor_id, active=True)
+                
+                # Giao việc cho nhiều người
+                task.assign_to_users(
+                    assignees=assignees,
+                    assigner=request.user,
+                    supervisor=supervisor,
+                    start_date=start_date,
+                    due_date=due_date
+                )
+                
+                return Response({
+                    'status': 'success',
+                    'message': f'Đã giao việc "{task.title}" cho {assignee.full_name}',
+                    'task': WorkTaskSerializer(task, context={'request': request}).data
+                })
+                
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Không tìm thấy người dùng được chỉ định'
+                }, status=400)
+            except Exception as e:
+                return Response({
+                    'error': str(e)
+                }, status=400)
+        
+        return Response(serializer.errors, status=400)
+    
+    @action(detail=True, methods=['post'])
+    def evaluate_task(self, request, pk=None):
+        """Đánh giá công việc (chỉ dành cho supervisor)"""
+        task = self.get_object()
+        
+        if not task.can_evaluate(request.user):
+            return Response({
+                'error': 'Bạn không có quyền đánh giá công việc này'
+            }, status=403)
+        
+        serializer = TaskEvaluationSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            try:
+                rating = serializer.validated_data['rating']
+                comment = serializer.validated_data.get('comment', '')
+                require_redo = serializer.validated_data.get('require_redo', False)
+                redo_reason = serializer.validated_data.get('redo_reason', '')
+                
+                redo_task = task.evaluate_task(request.user, rating, comment, require_redo, redo_reason)
+                
+                response_data = {
+                    'status': 'success',
+                    'message': f'Đã đánh giá công việc "{task.title}" với {rating} sao',
+                    'task': WorkTaskSerializer(task, context={'request': request}).data
+                }
+                
+                if redo_task:
+                    response_data['redo_task'] = WorkTaskSerializer(redo_task, context={'request': request}).data
+                    response_data['message'] += f'. Đã tạo công việc làm lại với ID #{redo_task.id}'
+                
+                return Response(response_data)
+                
+            except Exception as e:
+                return Response({
+                    'error': str(e)
+                }, status=400)
+        
+        return Response(serializer.errors, status=400)
+    
+    @action(detail=True, methods=['post'])
+    def mark_completed(self, request, pk=None):
+        """Đánh dấu công việc hoàn thành và thông báo supervisor"""
+        from django.utils import timezone
+        
+        task = self.get_object()
+        
+        # Kiểm tra quyền (chỉ assignee mới có thể đánh dấu hoàn thành)
+        if request.user not in task.assigned_to.all():
+            return Response({
+                'error': 'Bạn không có quyền đánh dấu hoàn thành công việc này'
+            }, status=403)
+        
+        try:
+            # Cập nhật trạng thái
+            task.status = 'hoan_thanh'
+            task.completed_date = timezone.now().date()
+            task.progress_percent = 100
+            task.save()
+            
+            # Thông báo cho supervisor
+            task.mark_completed_and_notify_supervisor(request.user)
+            
+            return Response({
+                'status': 'success',
+                'message': f'Đã đánh dấu hoàn thành công việc "{task.title}". Supervisor sẽ nhận được thông báo để đánh giá.',
+                'task': WorkTaskSerializer(task, context={'request': request}).data
+            })
+            
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=400)
+    
+    @action(detail=False, methods=['get'])
+    def my_assigned_tasks(self, request):
+        """Lấy danh sách công việc được giao cho user hiện tại"""
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
+        
+        tasks = self.get_queryset().filter(
+            assigned_to=request.user,
+            is_assigned=True
+        )
+        
+        # Apply additional filters
+        status = request.query_params.get('status')
+        if status:
+            tasks = tasks.filter(status=status)
+        
+        page = self.paginate_queryset(tasks)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(tasks, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def my_supervised_tasks(self, request):
+        """Lấy danh sách công việc mà user hiện tại giám sát"""
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
+        
+        tasks = self.get_queryset().filter(supervisor=request.user)
+        
+        # Apply additional filters
+        status = request.query_params.get('status')
+        if status:
+            tasks = tasks.filter(status=status)
+        
+        page = self.paginate_queryset(tasks)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(tasks, many=True)
+        return Response(serializer.data)
 
 
 class WorkTaskStatisticsView(APIView):
@@ -669,3 +845,314 @@ class ViewPreferenceViewSet(viewsets.ModelViewSet):
             serializer.save(user=self.request.user)
         else:
             serializer.save()
+
+
+class TaskAssignmentRequestViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for TaskAssignmentRequest management
+    """
+    queryset = TaskAssignmentRequest.objects.all()
+    serializer_class = TaskAssignmentRequestSerializer
+    permission_classes = [AllowAny]  # TODO: Change to [IsAuthenticated] in production
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['task__title', 'reason', 'requested_value']
+    ordering_fields = ['created_at', 'status', 'processed_at']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filter by task
+        task_id = self.request.query_params.get('task_id', None)
+        if task_id:
+            queryset = queryset.filter(task_id=task_id)
+        
+        # Filter by requester
+        requester_id = self.request.query_params.get('requester_id', None)
+        if requester_id:
+            queryset = queryset.filter(requester_id=requester_id)
+        
+        # Filter by approver
+        approver_id = self.request.query_params.get('approver_id', None)
+        if approver_id:
+            queryset = queryset.filter(approver_id=approver_id)
+        
+        # Filter by status
+        status = self.request.query_params.get('status', None)
+        if status:
+            queryset = queryset.filter(status=status)
+        
+        # Filter by request_type
+        request_type = self.request.query_params.get('request_type', None)
+        if request_type:
+            queryset = queryset.filter(request_type=request_type)
+        
+        return queryset
+    
+    def perform_create(self, serializer):
+        """Set requester and approver when creating a request"""
+        task = serializer.validated_data['task']
+        serializer.save(
+            requester=self.request.user,
+            approver=task.assigned_by or task.created_by
+        )
+    
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """Chấp nhận yêu cầu điều chỉnh"""
+        assignment_request = self.get_object()
+        
+        # Kiểm tra quyền
+        if request.user != assignment_request.approver:
+            return Response({
+                'error': 'Bạn không có quyền xử lý yêu cầu này'
+            }, status=403)
+        
+        if assignment_request.status != 'pending':
+            return Response({
+                'error': 'Yêu cầu đã được xử lý trước đó'
+            }, status=400)
+        
+        try:
+            from django.utils import timezone
+            
+            # Cập nhật task với giá trị mới
+            task = assignment_request.task
+            field_name = assignment_request.request_type
+            new_value = assignment_request.requested_value
+            
+            # Áp dụng thay đổi
+            if field_name == 'start_date':
+                from datetime import datetime
+                task.start_date = datetime.strptime(new_value, '%Y-%m-%d').date()
+            elif field_name == 'due_date':
+                from datetime import datetime
+                task.due_date = datetime.strptime(new_value, '%Y-%m-%d').date()
+            elif field_name in ['title', 'description', 'priority', 'work_group']:
+                setattr(task, field_name, new_value)
+            
+            task.save()
+            
+            # Cập nhật trạng thái yêu cầu
+            assignment_request.status = 'approved'
+            assignment_request.processed_at = timezone.now()
+            assignment_request.response_message = request.data.get('response_message', '')
+            assignment_request.save()
+            
+            # Tạo thông báo cho requester
+            TaskNotification.objects.create(
+                recipient=assignment_request.requester,
+                sender=request.user,
+                task=task,
+                assignment_request=assignment_request,
+                notification_type='assignment_approved',
+                title=f'Yêu cầu điều chỉnh được chấp nhận: {task.title}',
+                message=f'''Yêu cầu điều chỉnh "{assignment_request.get_request_type_display()}" của bạn đã được chấp nhận.
+
+Giá trị mới: {new_value}
+Phản hồi: {assignment_request.response_message or 'Không có phản hồi'}
+
+Công việc đã được cập nhật theo yêu cầu của bạn.''',
+                extra_data={
+                    'request_id': assignment_request.id,
+                    'field_name': field_name,
+                    'new_value': new_value,
+                }
+            )
+            
+            return Response({
+                'status': 'success',
+                'message': 'Đã chấp nhận yêu cầu điều chỉnh',
+                'request': TaskAssignmentRequestSerializer(assignment_request).data
+            })
+            
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=400)
+    
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """Từ chối yêu cầu điều chỉnh"""
+        assignment_request = self.get_object()
+        
+        # Kiểm tra quyền
+        if request.user != assignment_request.approver:
+            return Response({
+                'error': 'Bạn không có quyền xử lý yêu cầu này'
+            }, status=403)
+        
+        if assignment_request.status != 'pending':
+            return Response({
+                'error': 'Yêu cầu đã được xử lý trước đó'
+            }, status=400)
+        
+        try:
+            from django.utils import timezone
+            
+            # Cập nhật trạng thái yêu cầu
+            assignment_request.status = 'rejected'
+            assignment_request.processed_at = timezone.now()
+            assignment_request.response_message = request.data.get('response_message', '')
+            assignment_request.save()
+            
+            # Tạo thông báo cho requester
+            TaskNotification.objects.create(
+                recipient=assignment_request.requester,
+                sender=request.user,
+                task=assignment_request.task,
+                assignment_request=assignment_request,
+                notification_type='assignment_rejected',
+                title=f'Yêu cầu điều chỉnh bị từ chối: {assignment_request.task.title}',
+                message=f'''Yêu cầu điều chỉnh "{assignment_request.get_request_type_display()}" của bạn đã bị từ chối.
+
+Lý do từ chối: {assignment_request.response_message or 'Không có lý do cụ thể'}
+
+Vui lòng liên hệ với người giao việc để thảo luận thêm.''',
+                extra_data={
+                    'request_id': assignment_request.id,
+                    'field_name': assignment_request.request_type,
+                }
+            )
+            
+            return Response({
+                'status': 'success',
+                'message': 'Đã từ chối yêu cầu điều chỉnh',
+                'request': TaskAssignmentRequestSerializer(assignment_request).data
+            })
+            
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=400)
+    
+    @action(detail=False, methods=['get'])
+    def my_requests(self, request):
+        """Lấy danh sách yêu cầu của user hiện tại"""
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
+        
+        requests = self.get_queryset().filter(requester=request.user)
+        
+        page = self.paginate_queryset(requests)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(requests, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def pending_approvals(self, request):
+        """Lấy danh sách yêu cầu chờ phê duyệt của user hiện tại"""
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
+        
+        requests = self.get_queryset().filter(
+            approver=request.user,
+            status='pending'
+        )
+        
+        page = self.paginate_queryset(requests)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(requests, many=True)
+        return Response(serializer.data)
+
+
+class TaskNotificationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for TaskNotification management
+    """
+    queryset = TaskNotification.objects.all()
+    serializer_class = TaskNotificationSerializer
+    permission_classes = [AllowAny]  # TODO: Change to [IsAuthenticated] in production
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['title', 'message', 'task__title']
+    ordering_fields = ['created_at', 'is_read']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filter by recipient
+        recipient_id = self.request.query_params.get('recipient_id', None)
+        if recipient_id:
+            queryset = queryset.filter(recipient_id=recipient_id)
+        elif self.request.user and self.request.user.is_authenticated:
+            # Mặc định chỉ hiển thị thông báo của user hiện tại
+            queryset = queryset.filter(recipient=self.request.user)
+        
+        # Filter by notification_type
+        notification_type = self.request.query_params.get('notification_type', None)
+        if notification_type:
+            queryset = queryset.filter(notification_type=notification_type)
+        
+        # Filter by is_read
+        is_read = self.request.query_params.get('is_read', None)
+        if is_read is not None:
+            queryset = queryset.filter(is_read=is_read.lower() == 'true')
+        
+        # Filter by task
+        task_id = self.request.query_params.get('task_id', None)
+        if task_id:
+            queryset = queryset.filter(task_id=task_id)
+        
+        return queryset
+    
+    @action(detail=True, methods=['post'])
+    def mark_as_read(self, request, pk=None):
+        """Đánh dấu thông báo đã đọc"""
+        notification = self.get_object()
+        
+        # Kiểm tra quyền
+        if request.user != notification.recipient:
+            return Response({
+                'error': 'Bạn không có quyền thao tác với thông báo này'
+            }, status=403)
+        
+        notification.mark_as_read()
+        
+        return Response({
+            'status': 'success',
+            'message': 'Đã đánh dấu thông báo đã đọc',
+            'notification': TaskNotificationSerializer(notification).data
+        })
+    
+    @action(detail=False, methods=['post'])
+    def mark_all_as_read(self, request):
+        """Đánh dấu tất cả thông báo đã đọc"""
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
+        
+        from django.utils import timezone
+        
+        updated_count = TaskNotification.objects.filter(
+            recipient=request.user,
+            is_read=False
+        ).update(
+            is_read=True,
+            read_at=timezone.now()
+        )
+        
+        return Response({
+            'status': 'success',
+            'message': f'Đã đánh dấu {updated_count} thông báo đã đọc'
+        })
+    
+    @action(detail=False, methods=['get'])
+    def unread_count(self, request):
+        """Lấy số lượng thông báo chưa đọc"""
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
+        
+        count = TaskNotification.objects.filter(
+            recipient=request.user,
+            is_read=False
+        ).count()
+        
+        return Response({
+            'unread_count': count
+        })

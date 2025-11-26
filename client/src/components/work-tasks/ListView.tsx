@@ -27,6 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -54,6 +55,8 @@ import { apiClient, WorkTask } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import WorkTaskForm from "./WorkTaskForm";
+import TaskActions from "./TaskActions";
+import AssigneeEditor from "./AssigneeEditor";
 
 interface ListViewProps {
   tasks: WorkTask[];
@@ -97,6 +100,13 @@ export default function ListView({
       "created_at",
     ])
   );
+
+  // Fetch users for TaskActions
+  const { data: usersData } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => apiClient.getUsers({ page_size: 1000 }),
+  });
+  const users = usersData?.results || [];
 
   const [columnOrder] = useState<string[]>([
     "name",
@@ -724,11 +734,15 @@ export default function ListView({
     }
 
     if (columnId === "assignee") {
-      // Note: Assignee editing might need user selection dropdown
+      // Inline assignee editor
       return (
-        <div className="flex items-center gap-2">
-          <span className="text-sm">{task.assigned_to_name || "-"}</span>
-        </div>
+        <AssigneeEditor
+          task={task}
+          users={users}
+          onUpdate={() => {
+            queryClient.invalidateQueries({ queryKey: ["work-tasks"] });
+          }}
+        />
       );
     }
 
@@ -1160,6 +1174,9 @@ export default function ListView({
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Tùy chỉnh cột</DialogTitle>
+                <DialogDescription>
+                  Chọn các cột bạn muốn hiển thị trong bảng công việc. Bạn có thể ẩn/hiện các cột để tối ưu hóa giao diện.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
@@ -1224,7 +1241,7 @@ export default function ListView({
                       {getColumnLabel(columnId)}
                     </TableHead>
                   ))}
-                <TableHead className="w-12">Thao tác</TableHead>
+                <TableHead className="w-32">Thao tác</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1253,8 +1270,19 @@ export default function ListView({
                             {renderCellContent(task, columnId)}
                           </TableCell>
                         ))}
-                      <TableCell className="w-12">
-                        <div className="flex items-center gap-1">
+                      <TableCell className="w-32">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {/* TaskActions for assignment, evaluation, etc. */}
+                          <TaskActions 
+                            task={task} 
+                            users={users} 
+                            onTaskUpdate={() => {
+                              // Refresh tasks after action
+                              queryClient.invalidateQueries({ queryKey: ["work-tasks"] });
+                            }} 
+                          />
+                          
+                          {/* Edit button */}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1263,6 +1291,8 @@ export default function ListView({
                             title="Chỉnh sửa đầy đủ">
                             <Edit2 className="h-3 w-3" />
                           </Button>
+                          
+                          {/* Delete button (only for task creator) */}
                           {user && task.created_by === user.id && (
                             <Button
                               variant="ghost"

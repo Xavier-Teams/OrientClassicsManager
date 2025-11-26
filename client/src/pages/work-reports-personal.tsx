@@ -21,7 +21,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Legend, LineChart, Line } from "recharts";
 import { cn } from "@/lib/utils";
 import "@/styles/animations.css";
 
@@ -415,36 +415,36 @@ export default function WorkReportsPersonal() {
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-purple-600/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
       </div>
 
-      <div className="relative p-6 space-y-6">
+      <div className="relative p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
         {/* Enhanced Header */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 p-8 text-white shadow-2xl">
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 p-4 sm:p-6 lg:p-8 text-white shadow-2xl">
           <div className="absolute inset-0 bg-black/20"></div>
           
-          <div className="relative flex items-center justify-between">
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                  <User className="h-6 w-6" />
+          <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 lg:gap-0">
+            <div className="space-y-2 flex-1 min-w-0">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-1.5 sm:p-2 bg-white/20 rounded-lg backdrop-blur-sm flex-shrink-0">
+                  <User className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
-                <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-white to-purple-100 bg-clip-text text-transparent">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight bg-gradient-to-r from-white to-purple-100 bg-clip-text text-transparent truncate">
                   Báo cáo công việc cá nhân
                 </h1>
               </div>
-              <p className="text-purple-100 text-lg">
+              <p className="text-purple-100 text-sm sm:text-base lg:text-lg">
                 Thống kê công việc của bạn theo nhóm và trạng thái
               </p>
-              <div className="flex items-center gap-2 text-sm text-purple-200">
-                <TrendingUp className="h-4 w-4" />
-                <span>Cập nhật real-time • {filteredTasks.length} công việc của bạn</span>
+              <div className="flex items-center gap-2 text-xs sm:text-sm text-purple-200">
+                <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                <span className="truncate">Cập nhật real-time • {filteredTasks.length} công việc của bạn</span>
               </div>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 flex-shrink-0">
               <Select
                 value={selectedMonth.toString()}
                 onValueChange={(value) => setSelectedMonth(parseInt(value))}
               >
-                <SelectTrigger className="w-[140px] bg-white/20 border-white/30 text-white backdrop-blur-sm hover:bg-white/30 transition-all duration-200">
+                <SelectTrigger className="w-full sm:w-[140px] bg-white/20 border-white/30 text-white backdrop-blur-sm hover:bg-white/30 transition-all duration-200">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -459,7 +459,7 @@ export default function WorkReportsPersonal() {
                 value={selectedYear.toString()}
                 onValueChange={(value) => setSelectedYear(parseInt(value))}
               >
-                <SelectTrigger className="w-[120px] bg-white/20 border-white/30 text-white backdrop-blur-sm hover:bg-white/30 transition-all duration-200">
+                <SelectTrigger className="w-full sm:w-[120px] bg-white/20 border-white/30 text-white backdrop-blur-sm hover:bg-white/30 transition-all duration-200">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -488,7 +488,7 @@ export default function WorkReportsPersonal() {
             </div>
           </CardHeader>
           <CardContent className="relative space-y-6">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               {/* Total Tasks Card */}
               <Card 
                 className="group relative overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100 border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 cursor-pointer"
@@ -611,7 +611,6 @@ export default function WorkReportsPersonal() {
                   }}
                   className="h-[400px] relative z-10"
                 >
-                  <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={bc1ChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                       <defs>
                         <linearGradient id="barGradientPersonal" x1="0" y1="0" x2="0" y2="1">
@@ -641,7 +640,6 @@ export default function WorkReportsPersonal() {
                         animationBegin={0}
                       />
                     </BarChart>
-                  </ResponsiveContainer>
                 </ChartContainer>
               </div>
             )}
@@ -728,16 +726,16 @@ export default function WorkReportsPersonal() {
 
             {bc2ChartData.length > 0 && (
               <div className="grid gap-6 md:grid-cols-2">
-                <div className="relative">
+                <div className="relative overflow-x-auto">
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-red-500/5 to-orange-500/5 rounded-xl"></div>
-                  <ChartContainer
+                  <div className="min-w-[400px] w-full">
+                    <ChartContainer
                     config={{
                       "Còn hạn": { label: "Còn hạn", color: "#3b82f6" },
                       "Quá hạn": { label: "Quá hạn", color: "#ef4444" },
                     }}
-                    className="h-[350px] relative z-10"
+                    className="h-[250px] sm:h-[300px] lg:h-[350px] relative z-10"
                   >
-                    <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={bc2ChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                         <defs>
                           <linearGradient id="onTimeGradientPersonal" x1="0" y1="0" x2="0" y2="1">
@@ -782,21 +780,21 @@ export default function WorkReportsPersonal() {
                           animationBegin={200}
                         />
                       </BarChart>
-                    </ResponsiveContainer>
                   </ChartContainer>
+                  </div>
                 </div>
 
                 {bc2PieData.length > 0 && (
-                  <div className="relative">
+                  <div className="relative overflow-x-auto">
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-red-500/5 rounded-xl"></div>
-                    <ChartContainer
+                    <div className="min-w-[350px] w-full">
+                      <ChartContainer
                       config={{
                         "Còn hạn": { label: "Còn hạn", color: "#3b82f6" },
                         "Quá hạn": { label: "Quá hạn", color: "#ef4444" },
                       }}
-                      className="h-[350px] relative z-10"
+                      className="h-[250px] sm:h-[300px] lg:h-[350px] relative z-10"
                     >
-                      <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <defs>
                             <linearGradient id="pieOnTimePersonal" x1="0" y1="0" x2="1" y2="1">
@@ -840,8 +838,8 @@ export default function WorkReportsPersonal() {
                             }}
                           />
                         </PieChart>
-                      </ResponsiveContainer>
                     </ChartContainer>
+                    </div>
                   </div>
                 )}
               </div>
@@ -960,17 +958,17 @@ export default function WorkReportsPersonal() {
 
             {bc3ChartData.length > 0 && (
               <div className="grid gap-6 md:grid-cols-2">
-                <div className="relative">
+                <div className="relative overflow-x-auto">
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-green-500/5 to-orange-500/5 rounded-xl"></div>
-                  <ChartContainer
+                  <div className="min-w-[400px] w-full">
+                    <ChartContainer
                     config={{
                       "Đúng tiến độ": { label: "Đúng tiến độ", color: "#3b82f6" },
                       "Trước hạn": { label: "Trước hạn", color: "#10b981" },
                       "Chậm tiến độ": { label: "Chậm tiến độ", color: "#f97316" },
                     }}
-                    className="h-[350px] relative z-10"
+                    className="h-[250px] sm:h-[300px] lg:h-[350px] relative z-10"
                   >
-                    <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={bc3ChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                         <defs>
                           <linearGradient id="onTimeGradientPersonalBC3" x1="0" y1="0" x2="0" y2="1">
@@ -1026,22 +1024,22 @@ export default function WorkReportsPersonal() {
                           animationBegin={400}
                         />
                       </BarChart>
-                    </ResponsiveContainer>
                   </ChartContainer>
+                  </div>
                 </div>
 
                 {bc3PieData.length > 0 && (
-                  <div className="relative">
+                  <div className="relative overflow-x-auto">
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-green-500/5 to-orange-500/5 rounded-xl"></div>
-                    <ChartContainer
+                    <div className="min-w-[350px] w-full">
+                      <ChartContainer
                       config={{
                         "Đúng tiến độ": { label: "Đúng tiến độ", color: "#3b82f6" },
                         "Trước hạn": { label: "Trước hạn", color: "#10b981" },
                         "Chậm tiến độ": { label: "Chậm tiến độ", color: "#f97316" },
                       }}
-                      className="h-[350px] relative z-10"
+                      className="h-[250px] sm:h-[300px] lg:h-[350px] relative z-10"
                     >
-                      <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <defs>
                             <linearGradient id="pieOnTimePersonalBC3" x1="0" y1="0" x2="1" y2="1">
@@ -1095,8 +1093,8 @@ export default function WorkReportsPersonal() {
                             }}
                           />
                         </PieChart>
-                      </ResponsiveContainer>
                     </ChartContainer>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1126,7 +1124,7 @@ export default function WorkReportsPersonal() {
             
             {/* Trend Filters */}
             <div className="mt-6 space-y-4">
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 sm:gap-3">
                 <Button
                   variant={trendFilter === "total" ? "default" : "outline"}
                   size="sm"
@@ -1157,7 +1155,7 @@ export default function WorkReportsPersonal() {
               {trendFilter === "work_group" && (
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-gray-700">Chọn nhóm công việc:</p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 sm:gap-3">
                     {Object.entries(WORK_GROUP_LABELS).map(([key, label]) => (
                       <Button
                         key={key}
@@ -1183,7 +1181,7 @@ export default function WorkReportsPersonal() {
               {trendFilter === "status" && (
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-gray-700">Chọn trạng thái:</p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 sm:gap-3">
                     {[
                       { key: "hoan_thanh", label: "Hoàn thành" },
                       { key: "dang_tien_hanh", label: "Đang tiến hành" },
@@ -1214,14 +1212,14 @@ export default function WorkReportsPersonal() {
           
           <CardContent className="relative z-10">
             {trendData.length > 0 && (
-              <div className="relative">
+              <div className="relative overflow-x-auto">
                 <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl"></div>
-                <ChartContainer
+                <div className="min-w-[600px] w-full">
+                  <ChartContainer
                   config={{
                     total: { label: "Tổng số", color: "#a855f7" },
                   }}
-                  className="h-[400px] relative z-10">
-                  <ResponsiveContainer width="100%" height="100%">
+                  className="h-[300px] sm:h-[350px] lg:h-[400px] relative z-10">
                     <LineChart
                       data={trendData}
                       margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -1321,8 +1319,8 @@ export default function WorkReportsPersonal() {
                         );
                       })}
                     </LineChart>
-                  </ResponsiveContainer>
                 </ChartContainer>
+                </div>
               </div>
             )}
           </CardContent>

@@ -976,6 +976,91 @@ class ApiClient {
     });
   }
 
+  // Task Assignment API
+  async assignTask(id: number | string, data: TaskAssignmentData): Promise<{
+    status: string;
+    message: string;
+    task: WorkTask;
+  }> {
+    return this.request<{
+      status: string;
+      message: string;
+      task: WorkTask;
+    }>(`/api/v1/works/tasks/${id}/assign_task/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async evaluateTask(id: number | string, data: TaskEvaluationData): Promise<{
+    status: string;
+    message: string;
+    task: WorkTask;
+  }> {
+    return this.request<{
+      status: string;
+      message: string;
+      task: WorkTask;
+    }>(`/api/v1/works/tasks/${id}/evaluate_task/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getMyAssignedTasks(params?: {
+    page?: number;
+    page_size?: number;
+    status?: string;
+  }): Promise<{
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: WorkTask[];
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const queryString = queryParams.toString();
+    return this.request<{
+      count: number;
+      next: string | null;
+      previous: string | null;
+      results: WorkTask[];
+    }>(`/api/v1/works/tasks/my_assigned_tasks/${queryString ? `?${queryString}` : ""}`);
+  }
+
+  async getMySupervisedTasks(params?: {
+    page?: number;
+    page_size?: number;
+    status?: string;
+  }): Promise<{
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: WorkTask[];
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const queryString = queryParams.toString();
+    return this.request<{
+      count: number;
+      next: string | null;
+      previous: string | null;
+      results: WorkTask[];
+    }>(`/api/v1/works/tasks/my_supervised_tasks/${queryString ? `?${queryString}` : ""}`);
+  }
+
   // Custom Fields API
   async getCustomFields(params?: {
     page?: number;
@@ -1300,6 +1385,247 @@ class ApiClient {
     }
     return (response as any).results || [];
   }
+
+  // Task Assignment Requests API
+  async getAssignmentRequests(params?: {
+    page?: number;
+    page_size?: number;
+    task_id?: number;
+    requester_id?: number;
+    approver_id?: number;
+    status?: string;
+    request_type?: string;
+    search?: string;
+  }): Promise<{
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: TaskAssignmentRequest[];
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const queryString = queryParams.toString();
+    return this.request<{
+      count: number;
+      next: string | null;
+      previous: string | null;
+      results: TaskAssignmentRequest[];
+    }>(`/api/v1/works/assignment-requests/${queryString ? `?${queryString}` : ""}`);
+  }
+
+  async getAssignmentRequest(id: number | string): Promise<TaskAssignmentRequest> {
+    return this.request<TaskAssignmentRequest>(`/api/v1/works/assignment-requests/${id}/`);
+  }
+
+  async createAssignmentRequest(request: {
+    task: number;
+    request_type: string;
+    current_value?: string;
+    requested_value: string;
+    reason: string;
+  }): Promise<TaskAssignmentRequest> {
+    return this.request<TaskAssignmentRequest>("/api/v1/works/assignment-requests/", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async approveAssignmentRequest(id: number | string, response_message?: string): Promise<{
+    status: string;
+    message: string;
+    request: TaskAssignmentRequest;
+  }> {
+    return this.request<{
+      status: string;
+      message: string;
+      request: TaskAssignmentRequest;
+    }>(`/api/v1/works/assignment-requests/${id}/approve/`, {
+      method: "POST",
+      body: JSON.stringify({ response_message }),
+    });
+  }
+
+  async rejectAssignmentRequest(id: number | string, response_message?: string): Promise<{
+    status: string;
+    message: string;
+    request: TaskAssignmentRequest;
+  }> {
+    return this.request<{
+      status: string;
+      message: string;
+      request: TaskAssignmentRequest;
+    }>(`/api/v1/works/assignment-requests/${id}/reject/`, {
+      method: "POST",
+      body: JSON.stringify({ response_message }),
+    });
+  }
+
+  async getMyAssignmentRequests(params?: {
+    page?: number;
+    page_size?: number;
+  }): Promise<{
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: TaskAssignmentRequest[];
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const queryString = queryParams.toString();
+    return this.request<{
+      count: number;
+      next: string | null;
+      previous: string | null;
+      results: TaskAssignmentRequest[];
+    }>(`/api/v1/works/assignment-requests/my_requests/${queryString ? `?${queryString}` : ""}`);
+  }
+
+  async getPendingApprovals(params?: {
+    page?: number;
+    page_size?: number;
+  }): Promise<{
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: TaskAssignmentRequest[];
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const queryString = queryParams.toString();
+    return this.request<{
+      count: number;
+      next: string | null;
+      previous: string | null;
+      results: TaskAssignmentRequest[];
+    }>(`/api/v1/works/assignment-requests/pending_approvals/${queryString ? `?${queryString}` : ""}`);
+  }
+
+  // Task Notifications API
+  async getNotifications(params?: {
+    page?: number;
+    page_size?: number;
+    recipient_id?: number;
+    notification_type?: string;
+    is_read?: boolean;
+    task_id?: number;
+    search?: string;
+  }): Promise<{
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: TaskNotification[];
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const queryString = queryParams.toString();
+    return this.request<{
+      count: number;
+      next: string | null;
+      previous: string | null;
+      results: TaskNotification[];
+    }>(`/api/v1/works/notifications/${queryString ? `?${queryString}` : ""}`);
+  }
+
+  async getNotification(id: number | string): Promise<TaskNotification> {
+    return this.request<TaskNotification>(`/api/v1/works/notifications/${id}/`);
+  }
+
+  async markNotificationAsRead(id: number | string): Promise<{
+    status: string;
+    message: string;
+    notification: TaskNotification;
+  }> {
+    return this.request<{
+      status: string;
+      message: string;
+      notification: TaskNotification;
+    }>(`/api/v1/works/notifications/${id}/mark_as_read/`, {
+      method: "POST",
+    });
+  }
+
+  async markAllNotificationsAsRead(): Promise<{
+    status: string;
+    message: string;
+  }> {
+    return this.request<{
+      status: string;
+      message: string;
+    }>("/api/v1/works/notifications/mark_all_as_read/", {
+      method: "POST",
+    });
+  }
+
+  async getUnreadNotificationCount(): Promise<{
+    unread_count: number;
+  }> {
+    return this.request<{
+      unread_count: number;
+    }>("/api/v1/works/notifications/unread_count/");
+  }
+
+  async evaluateWorkTask(
+    id: number | string,
+    data: { 
+      rating: number; 
+      comment?: string; 
+      require_redo?: boolean; 
+      redo_reason?: string; 
+    }
+  ): Promise<{
+    status: string;
+    message: string;
+    task: WorkTask;
+    redo_task?: WorkTask;
+  }> {
+    return this.request<{
+      status: string;
+      message: string;
+      task: WorkTask;
+      redo_task?: WorkTask;
+    }>(`/api/v1/works/tasks/${id}/evaluate_task/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async markWorkTaskCompleted(id: number | string): Promise<{
+    status: string;
+    message: string;
+    task: WorkTask;
+  }> {
+    return this.request<{
+      status: string;
+      message: string;
+      task: WorkTask;
+    }>(`/api/v1/works/tasks/${id}/mark_completed/`, {
+      method: "POST",
+    });
+  }
 }
 
 // Export ContractFormValues type for use in other files
@@ -1443,19 +1769,36 @@ export interface WorkTask {
   work_group: string;
   frequency: string;
   priority: string;
-  assigned_to?: number;
-  assigned_to_name?: string;
+  assigned_to?: number[];           // Changed to array of IDs
+  assigned_to_names?: string[];     // Changed to array of names
+  assigned_to_ids?: number[];       // New field for explicit IDs
   created_by?: number;
   created_by_name?: string;
+  assigned_by?: number;
+  assigned_by_name?: string;
+  supervisor?: number;
+  supervisor_name?: string;
   status: string;
   start_date?: string;
   due_date?: string;
   completed_date?: string;
+  is_assigned: boolean;
+  assignment_date?: string;
   progress_percent: number;
+  supervisor_rating?: number;
+  supervisor_comment?: string;
+  evaluation_date?: string;
+  is_redo?: boolean;
+  original_task?: number;
+  original_task_title?: string;
+  redo_count?: number;
+  redo_reason?: string;
   notes?: string;
   is_active: boolean;
   is_overdue?: boolean;
   is_on_time?: boolean;
+  can_edit_dates?: boolean;
+  can_evaluate?: boolean;
   custom_field_values?: Record<number, {
     field_id: number;
     field_name: string;
@@ -1696,6 +2039,60 @@ export interface PaymentSummary {
     count: number;
     total_amount: number;
   };
+}
+
+export interface TaskAssignmentRequest {
+  id: number;
+  task: number;
+  task_title?: string;
+  requester: number;
+  requester_name?: string;
+  approver: number;
+  approver_name?: string;
+  request_type: 'start_date' | 'due_date' | 'title' | 'description' | 'priority' | 'work_group' | 'other';
+  request_type_display?: string;
+  current_value?: string;
+  requested_value: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  status_display?: string;
+  response_message?: string;
+  processed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskNotification {
+  id: number;
+  recipient: number;
+  recipient_name?: string;
+  sender?: number;
+  sender_name?: string;
+  task: number;
+  task_title?: string;
+  assignment_request?: number;
+  assignment_request_id?: number;
+  notification_type: 'task_assigned' | 'task_updated' | 'task_completed' | 'task_overdue' | 'assignment_request' | 'assignment_approved' | 'assignment_rejected' | 'evaluation_received' | 'reminder';
+  notification_type_display?: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  read_at?: string;
+  extra_data?: Record<string, any>;
+  created_at: string;
+}
+
+export interface TaskAssignmentData {
+  assignee_ids: number[];  // Changed to array
+  supervisor_id?: number;
+  start_date?: string;
+  due_date?: string;
+  message?: string;
+}
+
+export interface TaskEvaluationData {
+  rating: number;
+  comment?: string;
 }
 
 export const apiClient = new ApiClient();
