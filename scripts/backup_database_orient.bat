@@ -4,11 +4,11 @@ echo   OrientClassicsManager Database Backup
 echo ========================================
 
 :: Thiết lập biến môi trường cho OrientClassicsManager
-set PGPASSWORD=your_password_here
+set PGPASSWORD=01092016
 set DB_HOST=localhost
 set DB_PORT=5432
 set DB_USER=postgres
-set DB_NAME=orient_classics_manager
+set DB_NAME=translation_db
 
 :: Tạo thư mục backup nếu chưa có
 if not exist "backups" mkdir backups

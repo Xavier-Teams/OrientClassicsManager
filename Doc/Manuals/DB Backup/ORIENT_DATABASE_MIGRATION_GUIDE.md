@@ -19,16 +19,18 @@
 ## 🎯 Thông tin dự án
 
 ### Database Schema
+
 - **Database Name**: `orient_classics_manager`
 - **User**: `orient_user`
 - **Technology**: PostgreSQL + Drizzle ORM
 - **Port**: 5432 (default)
 
 ### Cấu trúc chính
+
 ```
 OrientClassicsManager Database:
 ├── Users & Roles (user_role enum)
-├── Contracts (contract_status enum)  
+├── Contracts (contract_status enum)
 ├── Translations (translation_status enum)
 ├── Payments & Categories
 ├── Works & Tasks
@@ -37,6 +39,7 @@ OrientClassicsManager Database:
 ```
 
 ### Enums quan trọng
+
 - `user_role`: chu_nhiem, pho_chu_nhiem, truong_ban_thu_ky, etc.
 - `translation_status`: draft, approved, in_progress, completed, etc.
 - `contract_status`: draft, pending_approval, approved, etc.
@@ -46,21 +49,25 @@ OrientClassicsManager Database:
 ## ⚡ Quick Start
 
 ### 🔥 Sao lưu nhanh
+
 ```bash
 scripts\backup_database_orient.bat
 ```
 
-### 🔥 Khôi phục nhanh  
+### 🔥 Khôi phục nhanh
+
 ```bash
 scripts\restore_database_orient.bat
 ```
 
 ### 🔥 Thiết lập database mới
+
 ```bash
 scripts\setup_database_orient.bat
 ```
 
 ### 🔥 Kiểm tra health
+
 ```bash
 scripts\check_database_orient.bat
 ```
@@ -70,7 +77,9 @@ scripts\check_database_orient.bat
 ## 🔧 Scripts tự động
 
 ### 📄 backup_database_orient.bat
+
 **Chức năng**: Sao lưu database OrientClassicsManager
+
 ```batch
 # Tự động tạo file backup với timestamp
 # Format: orient_classics_YYYY-MM-DD_HH-MM-SS.dump
@@ -79,15 +88,18 @@ scripts\check_database_orient.bat
 ```
 
 **Cấu hình**:
+
 ```batch
-set DB_NAME=orient_classics_manager
-set DB_USER=postgres  
+set DB_NAME=translation_db
+set DB_USER=postgres
 set DB_HOST=localhost
 set DB_PORT=5432
 ```
 
 ### 📄 restore_database_orient.bat
+
 **Chức năng**: Khôi phục database từ backup
+
 ```batch
 # Hiển thị danh sách backup có sẵn
 # Xác nhận trước khi xóa database cũ
@@ -95,8 +107,10 @@ set DB_PORT=5432
 # Kiểm tra tính toàn vẹn sau khôi phục
 ```
 
-### 📄 setup_database_orient.bat  
+### 📄 setup_database_orient.bat
+
 **Chức năng**: Thiết lập database từ đầu
+
 ```batch
 # Tạo database và user mới
 # Cấp quyền truy cập
@@ -106,7 +120,9 @@ set DB_PORT=5432
 ```
 
 ### 📄 check_database_orient.bat
+
 **Chức năng**: Kiểm tra sức khỏe database
+
 ```batch
 # Kiểm tra kết nối PostgreSQL
 # Xác minh database và user tồn tại
@@ -127,6 +143,7 @@ scripts\backup_database_orient.bat
 ```
 
 **Kết quả**:
+
 - File backup: `backups\orient_classics_2024-01-01_10-30-00.dump`
 - Format: PostgreSQL custom (nén, nhanh)
 - Bao gồm: Tất cả dữ liệu, cấu trúc, enums, constraints
@@ -149,7 +166,7 @@ pg_dump -h localhost -U postgres -d orient_classics_manager \
 1. **Kết nối** đến database `orient_classics_manager`
 2. **Right-click** → Backup
 3. **Format**: Custom
-4. **Options**: 
+4. **Options**:
    - Include data: Yes
    - Include schema: Yes
    - Compression: 6-9
@@ -169,6 +186,7 @@ scripts\restore_database_orient.bat
 ```
 
 **Quá trình**:
+
 1. Hiển thị danh sách backup
 2. Xác nhận xóa database cũ
 3. Tạo database mới
@@ -207,8 +225,9 @@ scripts\setup_database_orient.bat
 ```
 
 **Script sẽ thực hiện**:
+
 1. ✅ Tạo database `orient_classics_manager`
-2. ✅ Tạo user `orient_user` 
+2. ✅ Tạo user `orient_user`
 3. ✅ Cấp quyền truy cập
 4. ✅ Tạo file `.env` template
 5. ✅ Chạy Drizzle migrations
@@ -217,18 +236,21 @@ scripts\setup_database_orient.bat
 ### Thiết lập thủ công
 
 #### Bước 1: Tạo Database
+
 ```sql
-CREATE DATABASE orient_classics_manager 
-  WITH ENCODING 'UTF8' 
+CREATE DATABASE orient_classics_manager
+  WITH ENCODING 'UTF8'
   TEMPLATE template0;
 ```
 
 #### Bước 2: Tạo User
+
 ```sql
 CREATE USER orient_user WITH PASSWORD 'orient_password_2024';
 ```
 
 #### Bước 3: Cấp quyền
+
 ```sql
 GRANT ALL PRIVILEGES ON DATABASE orient_classics_manager TO orient_user;
 GRANT ALL PRIVILEGES ON SCHEMA public TO orient_user;
@@ -237,6 +259,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO orient_user;
 ```
 
 #### Bước 4: Cấu hình .env
+
 ```bash
 # Copy template
 copy scripts\env.template .env
@@ -246,11 +269,13 @@ DATABASE_URL=postgresql://orient_user:orient_password_2024@localhost:5432/orient
 ```
 
 #### Bước 5: Chạy Migrations
+
 ```bash
 npm run db:push
 ```
 
 #### Bước 6: Tạo dữ liệu mẫu (optional)
+
 ```bash
 npm run db:seed
 ```
@@ -266,6 +291,7 @@ scripts\check_database_orient.bat
 ```
 
 **Kiểm tra**:
+
 - ✅ PostgreSQL service
 - ✅ Database existence
 - ✅ User permissions
@@ -304,12 +330,14 @@ SELECT pg_size_pretty(pg_database_size('orient_classics_manager'));
 ### 📋 Máy cũ (Source)
 
 #### Chuẩn bị
+
 - [ ] ✅ Dừng ứng dụng OrientClassicsManager
 - [ ] ✅ Kiểm tra version PostgreSQL: `SELECT version();`
 - [ ] ✅ Kiểm tra kích thước database
 - [ ] ✅ Backup file uploads trong `uploads/`
 
 #### Sao lưu
+
 - [ ] ✅ Chạy `scripts\backup_database_orient.bat`
 - [ ] ✅ Kiểm tra file backup được tạo
 - [ ] ✅ Verify backup: `pg_restore --list backup.dump`
@@ -318,24 +346,28 @@ SELECT pg_size_pretty(pg_database_size('orient_classics_manager'));
 ### 📋 Máy mới (Target)
 
 #### Cài đặt
+
 - [ ] ✅ Cài đặt PostgreSQL (cùng version hoặc mới hơn)
 - [ ] ✅ Cài đặt Node.js và npm
 - [ ] ✅ Clone source code OrientClassicsManager
 - [ ] ✅ Chạy `npm install`
 
 #### Thiết lập Database
+
 - [ ] ✅ Copy backup file vào thư mục `backups/`
 - [ ] ✅ Chạy `scripts\restore_database_orient.bat`
 - [ ] ✅ Hoặc chạy `scripts\setup_database_orient.bat` (database mới)
 - [ ] ✅ Cấu hình file `.env`
 
 #### Kiểm tra
+
 - [ ] ✅ Chạy `scripts\check_database_orient.bat`
 - [ ] ✅ Chạy `npm run dev` để test ứng dụng
 - [ ] ✅ Kiểm tra login và các chức năng chính
 - [ ] ✅ Copy file uploads từ máy cũ
 
 #### Hoàn tất
+
 - [ ] ✅ Cập nhật DNS/IP nếu cần
 - [ ] ✅ Thông báo team về địa chỉ mới
 - [ ] ✅ Lên lịch backup định kỳ
@@ -350,6 +382,7 @@ SELECT pg_size_pretty(pg_database_size('orient_classics_manager'));
 **Triệu chứng**: `FATAL: password authentication failed`
 
 **Giải pháp**:
+
 ```bash
 # Kiểm tra service
 net start postgresql-x64-14
@@ -366,6 +399,7 @@ psql -U postgres -c "ALTER USER postgres PASSWORD 'new_password';"
 **Triệu chứng**: `database "orient_classics_manager" does not exist`
 
 **Giải pháp**:
+
 ```bash
 # Tạo database
 createdb -U postgres orient_classics_manager
@@ -379,6 +413,7 @@ scripts\setup_database_orient.bat
 **Triệu chứng**: `permission denied for database`
 
 **Giải pháp**:
+
 ```sql
 -- Cấp quyền đầy đủ
 GRANT ALL PRIVILEGES ON DATABASE orient_classics_manager TO orient_user;
@@ -392,6 +427,7 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO orient_user;
 **Triệu chứng**: `pg_restore: error: input file appears to be a text format dump`
 
 **Giải pháp**:
+
 ```bash
 # Nếu backup là SQL text
 psql -U postgres -d orient_classics_manager < backup.sql
@@ -405,6 +441,7 @@ pg_dump -U postgres -d orient_classics_manager -Fc > new_backup.dump
 **Triệu chứng**: `pg_restore: server version mismatch`
 
 **Giải pháp**:
+
 ```bash
 # Sử dụng pg_dump của version mới hơn
 "C:\Program Files\PostgreSQL\14\bin\pg_dump" -U postgres ...
@@ -418,6 +455,7 @@ pg_dump -U postgres -d orient_classics_manager > backup.sql
 **Triệu chứng**: `type "user_role" does not exist`
 
 **Giải pháp**:
+
 ```bash
 # Chạy lại migrations
 npm run db:push
@@ -431,6 +469,7 @@ psql -U postgres -d orient_classics_manager -f shared/schema.sql
 **Triệu chứng**: `DATABASE_URL must be set`
 
 **Giải pháp**:
+
 ```bash
 # Copy template
 copy scripts\env.template .env
@@ -458,6 +497,7 @@ DATABASE_URL=postgresql://orient_user:orient_password_2024@localhost:5432/orient
 ### 🆘 Liên hệ
 
 Nếu gặp vấn đề không thể giải quyết:
+
 1. Kiểm tra logs PostgreSQL
 2. Chạy `scripts\check_database_orient.bat`
 3. Tham khảo file `TROUBLESHOOTING.md`
@@ -467,12 +507,12 @@ Nếu gặp vấn đề không thể giải quyết:
 
 ## 📝 Lịch sử cập nhật
 
-| Ngày | Phiên bản | Thay đổi |
-|------|-----------|----------|
-| 2024-01-01 | 1.0 | Tạo hướng dẫn ban đầu |
-| 2024-01-15 | 1.1 | Thêm scripts tự động |
-| 2024-02-01 | 1.2 | Cập nhật troubleshooting |
+| Ngày       | Phiên bản | Thay đổi                 |
+| ---------- | --------- | ------------------------ |
+| 2024-01-01 | 1.0       | Tạo hướng dẫn ban đầu    |
+| 2024-01-15 | 1.1       | Thêm scripts tự động     |
+| 2024-02-01 | 1.2       | Cập nhật troubleshooting |
 
 ---
 
-*Tài liệu này được tạo riêng cho dự án **OrientClassicsManager**. Cập nhật lần cuối: 2024-11-27*
+_Tài liệu này được tạo riêng cho dự án **OrientClassicsManager**. Cập nhật lần cuối: 2024-11-27_
