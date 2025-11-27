@@ -1,185 +1,247 @@
-# 🚀 HỆ THỐNG QUẢN LÝ DỰ ÁN KINH ĐIỂN PHƯƠNG ĐÔNG
+# 📚 OrientClassicsManager Documentation
 
-Hệ thống phần mềm quản lý toàn diện cho Dự án Dịch thuật và phát huy giá trị tinh hoa các tác phẩm kinh điển phương Đông.
+> **Tài liệu tổng hợp** cho hệ thống quản lý dự án dịch thuật OrientClassicsManager
 
-## 📋 Mục lục
+## 🎯 Tổng quan dự án
 
-- [Tổng quan](#tổng-quan)
-- [Tính năng](#tính-năng)
-- [Tech Stack](#tech-stack)
-- [Quick Start](#quick-start)
-- [Cấu trúc dự án](#cấu-trúc-dự-án)
-- [Tài liệu](#tài-liệu)
-
-## 📌 Tổng quan
-
-Dự án được xây dựng như một **phần mềm độc lập**, không phụ thuộc vào Odoo hay bất kỳ framework nào khác. HRMS chỉ được sử dụng như **nguồn tham khảo** để học hỏi workflow và best practices.
-
-### Kiến trúc
-
-- **Backend**: Django 4.2+ REST Framework + Express.js (Node.js)
-- **Frontend**: React 18+ với TypeScript
+OrientClassicsManager là hệ thống quản lý dự án dịch thuật được phát triển với:
+- **Frontend**: React + TypeScript + TailwindCSS
+- **Backend**: Express.js + Drizzle ORM  
 - **Database**: PostgreSQL
-- **AI**: OpenAI API integration
-- **Authentication**: JWT
+- **Architecture**: Full-stack TypeScript
 
-## ✨ Tính năng
+---
 
-- ✅ **Quản lý Tác phẩm & Dịch thuật** - Quản lý toàn bộ vòng đời tác phẩm
-- ✅ **Quản lý Hợp đồng & Thanh toán** - Theo dõi hợp đồng và thanh toán
-- ✅ **Thẩm định & Nghiệm thu** - Quản lý hội đồng thẩm định
-- ✅ **Biên tập & Xuất bản** - Quản lý quy trình biên tập
-- ✅ **Quản lý Hành chính** - Biểu mẫu và quy trình
-- ✅ **AI Integration** - Smart queries và translation assistant
-- ⏳ **Quản lý Tài liệu** - Document management với workflow routing
-- ⏳ **Dashboard & Analytics** - Thống kê và báo cáo
-- ⏳ **Quản lý Nhân sự** - Employee và department management
+## 📋 Cấu trúc tài liệu
 
-## 🛠️ Tech Stack
+### 🚀 [Setup](Setup/)
+Hướng dẫn cài đặt và triển khai hệ thống
+- **[COMPLETE_SETUP_GUIDE.md](Setup/COMPLETE_SETUP_GUIDE.md)** - Hướng dẫn cài đặt hoàn chỉnh
+- **[QUICK_START.md](Setup/QUICK_START.md)** - Khởi động nhanh
+- **[SETUP_GUIDE.md](Setup/SETUP_GUIDE.md)** - Hướng dẫn setup chi tiết
+- **[FASTAPI_SETUP.md](Setup/FASTAPI_SETUP.md)** - Setup FastAPI (legacy)
 
-### Backend
-- **Django 4.2+** với Django REST Framework
-- **Express.js** với TypeScript
-- **PostgreSQL** database
-- **Django FSM** cho workflow management
-- **JWT** authentication
+### 🗄️ [Database](Database/)
+Tài liệu về database và quản lý dữ liệu
+- **[DATABASE_COMPLETE_GUIDE.md](Database/DATABASE_COMPLETE_GUIDE.md)** - Hướng dẫn database toàn diện
+- **[DATABASE_DOCUMENTATION.md](Database/DATABASE_DOCUMENTATION.md)** - Tài liệu schema
+- **[QUICK_START_DATABASE.md](Database/QUICK_START_DATABASE.md)** - Khởi tạo database nhanh
+- **[PGADMIN4_SETUP_GUIDE.md](Database/PGADMIN4_SETUP_GUIDE.md)** - Cài đặt pgAdmin4
+- **SQL Files**: Schema và seed data
 
-### Frontend
-- **React 18+** với TypeScript
-- **Vite** build tool
-- **Tailwind CSS** + **shadcn/ui**
-- **React Query** cho data fetching
+### 🌐 [API](API/)
+Tài liệu API và integration
+- **[API_COMPLETE_GUIDE.md](API/API_COMPLETE_GUIDE.md)** - Hướng dẫn API toàn diện
+- **[API_DOCUMENTATION.md](API/API_DOCUMENTATION.md)** - Chi tiết API endpoints
+- **[API_CONNECTION_GUIDE.md](API/API_CONNECTION_GUIDE.md)** - Hướng dẫn kết nối API
+- **[TEST_API.md](API/TEST_API.md)** - Testing API
 
-### AI Integration
-- **OpenAI API** (GPT-4)
-- Smart Query System
-- Translation Assistant
+### 🔧 [Development](Development/)
+Hướng dẫn phát triển và debugging
+- **[DEVELOPMENT_GUIDE.md](Development/DEVELOPMENT_GUIDE.md)** - Hướng dẫn phát triển
+- **[DJANGO_SERVER_LOGS_EXPLAINED.md](Development/DJANGO_SERVER_LOGS_EXPLAINED.md)** - Giải thích logs
+- **[FE_BE_CONNECTION_SUMMARY.md](Development/FE_BE_CONNECTION_SUMMARY.md)** - Kết nối Frontend-Backend
 
-## 🚀 Quick Start
+### 🏗️ [Architecture](Architecture/)
+Kiến trúc hệ thống và thiết kế
+- **[SYSTEM_ARCHITECTURE.md](Architecture/SYSTEM_ARCHITECTURE.md)** - Tổng quan kiến trúc hệ thống
+- **[ARCHITECTURE_DECISION.md](Architecture/ARCHITECTURE_DECISION.md)** - Quyết định kiến trúc
+- **[PAYMENT_ARCHITECTURE.md](Architecture/PAYMENT_ARCHITECTURE.md)** - Kiến trúc thanh toán
 
-### 1. Setup Backend (Express)
+### 📋 [BA](BA/)
+Tài liệu phân tích nghiệp vụ
+- **[BA_PM_Quan_ly_Du_an_dich_thuat.md](BA/BA_PM_Quan_ly_Du_an_dich_thuat.md)** - Phân tích dự án
+- **[KE_HOACH_TRIEN_KHAI_CHI_TIET.md](BA/KE_HOACH_TRIEN_KHAI_CHI_TIET.md)** - Kế hoạch triển khai
+- **[Quy_trinh_quan_ly_hop_phan_dich_thuat.md](BA/Quy_trinh_quan_ly_hop_phan_dich_thuat.md)** - Quy trình quản lý
+- **[TOM_TAT_KE_HOACH.md](BA/TOM_TAT_KE_HOACH.md)** - Tóm tắt kế hoạch
 
+### 📝 [Forms](Forms/)
+Mẫu biểu và forms
+- **[hop_dong.md](Forms/hop_dong.md)** - Mẫu hợp đồng
+
+### 📖 [Manuals](Manuals/)
+Hướng dẫn sử dụng và tính năng
+- **[ASSIGNMENT_FEATURES.md](Manuals/ASSIGNMENT_FEATURES.md)** - Tính năng giao việc
+- **[EVALUATION_REDO_FEATURES.md](Manuals/EVALUATION_REDO_FEATURES.md)** - Tính năng đánh giá
+- **[HUONG_DAN_CAI_DAT_VA_TRIEN_KHAI.md](Manuals/HUONG_DAN_CAI_DAT_VA_TRIEN_KHAI.md)** - Hướng dẫn cài đặt
+- **[VALIDATION_FIX.md](Manuals/VALIDATION_FIX.md)** - Sửa lỗi validation
+- **DB Backup**: Hướng dẫn backup database
+
+---
+
+## ⚡ Quick Start
+
+### 1. Cài đặt nhanh
 ```bash
+# Clone repository
+git clone <repository-url>
+cd OrientClassicsManager
+
+# Setup database
+scripts\setup_database_orient.bat
+
 # Install dependencies
 npm install
 
-# Setup environment
-cp .env.example .env
-# Chỉnh sửa .env với thông tin database
+# Start development server
+npm run dev
+```
 
-# Push database schema
+### 2. Truy cập ứng dụng
+- **Application**: http://localhost:5000
+- **API**: http://localhost:5000/api
+- **Database**: localhost:5432
+
+---
+
+## 🔧 Development Workflow
+
+### 1. Setup môi trường
+```bash
+# Cài đặt PostgreSQL
+# Tạo database và user
+# Cấu hình .env file
+```
+
+### 2. Development
+```bash
+# Start development server
+npm run dev
+
+# Run database migrations
 npm run db:push
 
-# Seed database (optional)
+# Seed sample data
 npm run db:seed
-
-# Start server
-npm run dev
 ```
 
-Server sẽ chạy tại: **http://localhost:5000**
-
-### 2. Setup Backend (Django)
-
+### 3. Testing
 ```bash
-# Activate virtual environment
-.\venv-django\Scripts\activate  # Windows
-source venv-django/bin/activate  # Linux/Mac
+# Run tests
+npm test
 
-# Navigate to backend-django
-cd backend-django
-
-# Run migrations
-python manage.py migrate
-
-# Create superuser
-python manage.py createsuperuser
-
-# Start server
-python manage.py runserver
+# Check API endpoints
+curl http://localhost:5000/api/health
 ```
 
-Django server sẽ chạy tại: **http://localhost:8000**
+---
 
-### 3. Setup Frontend
+## 📊 System Overview
 
+### Core Modules
+- **👥 User Management**: Quản lý người dùng và phân quyền
+- **📄 Contract Management**: Quản lý hợp đồng dịch thuật
+- **🔤 Translation Workflow**: Quy trình dịch thuật
+- **💰 Payment System**: Hệ thống thanh toán
+- **📝 Work Management**: Quản lý công việc
+- **⭐ Review System**: Hệ thống đánh giá
+
+### User Roles
+- **chu_nhiem**: Chủ nhiệm (Full access)
+- **pho_chu_nhiem**: Phó Chủ nhiệm
+- **truong_ban_thu_ky**: Trưởng ban Thư ký
+- **thu_ky_hop_phan**: Thư ký hợp phần
+- **dich_gia**: Dịch giả
+- **bien_tap_vien**: Biên tập viên
+- **ky_thuat_vien**: Kỹ thuật viên
+
+---
+
+## 🛠️ Maintenance
+
+### Database Backup
 ```bash
-# Install dependencies
-npm install
+# Backup database
+scripts\backup_database_orient.bat
 
-# Start dev server
-npm run dev
+# Restore database
+scripts\restore_database_orient.bat
+
+# Health check
+scripts\check_database_orient.bat
 ```
 
-Frontend sẽ chạy tại: **http://localhost:5173**
+### System Updates
+```bash
+# Update dependencies
+npm update
 
-## 📁 Cấu trúc dự án
+# Database migration
+npm run db:push
 
-```
-OrientClassicsManager/
-├── backend-django/      # Django backend
-│   ├── config/         # Django settings
-│   ├── users/         # User management
-│   ├── works/         # Works & Parts management
-│   ├── contracts/     # Contracts management
-│   └── ...
-│
-├── server/             # Express backend
-│   ├── ai/            # AI services
-│   ├── routes.ts      # API routes
-│   └── ...
-│
-├── client/            # React frontend
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   └── lib/
-│   └── ...
-│
-├── shared/            # Shared code
-│   └── schema.ts     # Database schema
-│
-└── Doc/              # Documentation
-    ├── README.md     # This file
-    ├── SETUP_GUIDE.md
-    ├── DEVELOPMENT_GUIDE.md
-    └── ...
+# Restart services
+pm2 restart all
 ```
 
-## 📚 Tài liệu
+---
 
-### Hướng dẫn Setup
-- [SETUP_GUIDE.md](./SETUP_GUIDE.md) - Hướng dẫn setup chi tiết
+## 📞 Support & Troubleshooting
 
-### Hướng dẫn Phát triển
-- [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md) - Hướng dẫn phát triển và triển khai
+### Common Issues
 
-### Tham khảo HRMS
-- [HRMS_REFERENCE.md](./HRMS_REFERENCE.md) - Phân tích và tham khảo từ HRMS
+**Database Connection Error**:
+- Kiểm tra PostgreSQL service
+- Xác minh DATABASE_URL trong .env
+- Chạy health check script
 
-### Tài liệu Kỹ thuật
-- [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) - API Specification
-- [DATABASE_DOCUMENTATION.md](./DATABASE_DOCUMENTATION.md) - Database Schema & Seed
-- [AI_PLAN.md](./AI_PLAN.md) - Kế hoạch tích hợp AI
+**Module Not Found**:
+- Chạy `npm install`
+- Xóa node_modules và cài lại
 
-## 🔐 Authentication
+**Permission Denied**:
+- Kiểm tra user roles
+- Xác minh database permissions
 
-Hệ thống sử dụng JWT authentication:
-1. Login tại `/api/v1/auth/login/` (Django) hoặc `/api/auth/login` (Express)
-2. Nhận access token và refresh token
-3. Include token trong header: `Authorization: Bearer <token>`
+### Getting Help
+1. Kiểm tra tài liệu trong thư mục tương ứng
+2. Chạy health check scripts
+3. Xem logs trong console/file
+4. Liên hệ team development
 
-## 🎯 Định hướng
+---
 
-- ✅ **Độc lập hoàn toàn** - Không phụ thuộc vào Odoo
-- ✅ **Tự xây dựng** - Mọi tính năng được implement từ đầu
-- ✅ **Tham khảo có chọn lọc** - HRMS chỉ để học hỏi workflow
-- ✅ **Tập trung mục tiêu** - Quản lý Dự án và tài liệu
+## 📈 Roadmap
 
-## 🤝 Đóng góp
+### Version 1.0 (Current)
+- ✅ Core user management
+- ✅ Contract management
+- ✅ Basic translation workflow
+- ✅ Payment tracking
 
-Dự án đang trong giai đoạn phát triển. Mọi đóng góp đều được chào đón!
+### Version 1.1 (Planned)
+- 🔄 Advanced workflow automation
+- 🔄 Real-time notifications
+- 🔄 Advanced reporting
+- 🔄 Mobile app support
+
+### Version 2.0 (Future)
+- 📋 AI-powered translation assistance
+- 📋 Advanced analytics
+- 📋 Multi-language support
+- 📋 Third-party integrations
+
+---
+
+## 🤝 Contributing
+
+### Development Guidelines
+1. Follow TypeScript best practices
+2. Write tests for new features
+3. Update documentation
+4. Follow Git commit conventions
+
+### Code Style
+- Use Prettier for formatting
+- Follow ESLint rules
+- Use meaningful variable names
+- Add JSDoc comments for functions
+
+---
 
 ## 📄 License
 
-Copyright © 2024 Dự án Kinh điển Phương Đông
+This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
+
+---
+
+*Documentation for OrientClassicsManager v1.0 - Last updated: 2024-11-27*
