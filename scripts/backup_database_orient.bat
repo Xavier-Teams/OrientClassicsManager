@@ -10,6 +10,14 @@ set DB_PORT=5432
 set DB_USER=postgres
 set DB_NAME=translation_db
 
+:: Thiết lập đường dẫn PostgreSQL (tự động phát hiện)
+set PG_BIN_PATH="C:\Program Files\PostgreSQL\18\bin"
+set PG_DUMP_CMD=%PG_BIN_PATH%\pg_dump.exe
+
+echo 🔧 Cấu hình PostgreSQL:
+echo    - PostgreSQL Path: %PG_BIN_PATH%
+echo    - Version: PostgreSQL 18
+
 :: Tạo thư mục backup nếu chưa có
 if not exist "backups" mkdir backups
 
@@ -29,7 +37,7 @@ echo.
 echo 🔄 Đang sao lưu database OrientClassicsManager...
 
 :: Sao lưu database với custom format (nén và nhanh hơn)
-pg_dump -h %DB_HOST% -p %DB_PORT% -U %DB_USER% -d %DB_NAME% -Fc -v --exclude-table-data="drizzle.__drizzle_migrations" > "backups\orient_classics_%timestamp%.dump"
+%PG_DUMP_CMD% -h %DB_HOST% -p %DB_PORT% -U %DB_USER% -d %DB_NAME% -Fc -v --exclude-table-data="drizzle.__drizzle_migrations" > "backups\orient_classics_%timestamp%.dump"
 
 if %ERRORLEVEL% EQU 0 (
     echo.
