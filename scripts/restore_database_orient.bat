@@ -10,6 +10,17 @@ set DB_PORT=5432
 set DB_USER=postgres
 set DB_NAME=translation_db
 
+:: Thiết lập đường dẫn PostgreSQL (tự động phát hiện)
+set PG_BIN_PATH="C:\Program Files\PostgreSQL\18\bin"
+set PSQL_CMD=%PG_BIN_PATH%\psql.exe
+set CREATEDB_CMD=%PG_BIN_PATH%\createdb.exe
+set DROPDB_CMD=%PG_BIN_PATH%\dropdb.exe
+set PG_RESTORE_CMD=%PG_BIN_PATH%\pg_restore.exe
+
+echo 🔧 Cấu hình PostgreSQL:
+echo    - PostgreSQL Path: %PG_BIN_PATH%
+echo    - Version: PostgreSQL 18
+
 echo 📊 Thông tin Database:
 echo    - Tên DB: %DB_NAME%
 echo    - Host: %DB_HOST%:%DB_PORT%
@@ -61,10 +72,10 @@ echo.
 echo 🔄 Bắt đầu quá trình khôi phục...
 
 echo 1️⃣ Ngắt kết nối hiện tại đến database...
-psql -h %DB_HOST% -p %DB_PORT% -U %DB_USER% -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '%DB_NAME%' AND pid <> pg_backend_pid();" 2>nul
+%PSQL_CMD% -h %DB_HOST% -p %DB_PORT% -U %DB_USER% -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '%DB_NAME%' AND pid <> pg_backend_pid();" 2>nul
 
 echo 2️⃣ Xóa database cũ...
-dropdb -h %DB_HOST% -p %DB_PORT% -U %DB_USER% %DB_NAME% 2>nul
+%DROPDB_CMD% -h %DB_HOST% -p %DB_PORT% -U %DB_USER% %DB_NAME% 2>nul
 if %ERRORLEVEL% EQU 0 (
     echo    ✅ Đã xóa database cũ
 ) else (
@@ -72,7 +83,7 @@ if %ERRORLEVEL% EQU 0 (
 )
 
 echo 3️⃣ Tạo database mới...
-createdb -h %DB_HOST% -p %DB_PORT% -U %DB_USER% %DB_NAME% -E UTF8 -T template0
+%CREATEDB_CMD% -h %DB_HOST% -p %DB_PORT% -U %DB_USER% %DB_NAME% -E UTF8 -T template0
 if %ERRORLEVEL% NEQ 0 (
     echo ❌ Không thể tạo database mới!
     pause
@@ -81,7 +92,7 @@ if %ERRORLEVEL% NEQ 0 (
 echo    ✅ Đã tạo database mới
 
 echo 4️⃣ Khôi phục dữ liệu từ backup...
-pg_restore -h %DB_HOST% -p %DB_PORT% -U %DB_USER% -d %DB_NAME% -v -c --if-exists "backups\%BACKUP_FILE%"
+%PG_RESTORE_CMD% -h %DB_HOST% -p %DB_PORT% -U %DB_USER% -d %DB_NAME% -v -c --if-exists "backups\%BACKUP_FILE%"
 
 if %ERRORLEVEL% EQU 0 (
     echo.
@@ -96,7 +107,7 @@ if %ERRORLEVEL% EQU 0 (
     
     echo.
     echo 🔍 Kiểm tra database sau khôi phục...
-    psql -h %DB_HOST% -p %DB_PORT% -U %DB_USER% -d %DB_NAME% -c "\dt" 2>nul
+    %PSQL_CMD% -h %DB_HOST% -p %DB_PORT% -U %DB_USER% -d %DB_NAME% -c "\dt" 2>nul
     if %ERRORLEVEL% EQU 0 (
         echo    ✅ Database hoạt động bình thường
     )
