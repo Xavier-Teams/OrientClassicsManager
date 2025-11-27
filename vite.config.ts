@@ -11,10 +11,10 @@ export default defineConfig({
     process.env.REPL_ID !== undefined
       ? [
           await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer(),
+            m.cartographer()
           ),
           await import("@replit/vite-plugin-dev-banner").then((m) =>
-            m.devBanner(),
+            m.devBanner()
           ),
         ]
       : []),
@@ -32,10 +32,11 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    host: process.platform === "win32" ? "localhost" : "0.0.0.0",
     fs: {
       strict: true,
       deny: ["**/.*"],
     },
   },
-  logLevel: 'warn', // Suppress PostCSS warnings
+  logLevel: "warn", // Suppress PostCSS warnings
 });
