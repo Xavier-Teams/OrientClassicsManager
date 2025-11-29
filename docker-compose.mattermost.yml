@@ -1,0 +1,116 @@
+# Docker Compose for Mattermost - OrientClassicsManager
+# Team Collaboration Platform Integration
+
+version: "3.8"
+
+services:
+  mattermost:
+    image: mattermost/mattermost-team-edition:latest
+    container_name: orient-mattermost
+    restart: unless-stopped
+    ports:
+      - "8065:8065"
+    environment:
+      # Database Configuration
+      - MM_SQLSETTINGS_DRIVERNAME=postgres
+      - MM_SQLSETTINGS_DATASOURCE=postgres://mattermost_user:${MATTERMOST_DB_PASSWORD:-mattermost_password_2024}@postgres:5432/mattermost?sslmode=disable&connect_timeout=10
+      
+      # Site Configuration
+      - MM_SERVICESETTINGS_SITEURL=http://localhost:8065
+      - MM_SERVICESETTINGS_LISTENADDRESS=:8065
+      
+      # Email Configuration (Optional - for notifications)
+      - MM_EMAILSETTINGS_SMTPSERVER=${SMTP_HOST:-smtp.gmail.com}
+      - MM_EMAILSETTINGS_SMTPPORT=${SMTP_PORT:-587}
+      - MM_EMAILSETTINGS_SMTPUSERNAME=${SMTP_USER:-}
+      - MM_EMAILSETTINGS_SMTPPASSWORD=${SMTP_PASS:-}
+      - MM_EMAILSETTINGS_ENABLESMTPAUTH=true
+      - MM_EMAILSETTINGS_FEEDBACKEMAIL=${SMTP_USER:-noreply@orientclassics.com}
+      - MM_EMAILSETTINGS_FEEDBACKNAME=OrientClassicsManager
+      
+      # Security
+      - MM_SERVICESETTINGS_ENABLESIGNUPWITHEMAIL=true
+      - MM_SERVICESETTINGS_ENABLESIGNUPWITHSERVICE=false
+      - MM_SERVICESETTINGS_ENABLEUSERCREATION=true
+      
+      # Performance
+      - MM_SERVICESETTINGS_MAXIMUMLOGINSESSIONS=10
+      - MM_SERVICESETTINGS_SESSIONLENGTHWEBINHOURS=720
+      - MM_SERVICESETTINGS_SESSIONLENGTHMOBILEINHOURS=720
+      
+      # Logging
+      - MM_LOGSETTINGS_ENABLECONSOLE=true
+      - MM_LOGSETTINGS_CONSOLELEVEL=INFO
+      - MM_LOGSETTINGS_ENABLEFILE=false
+      
+      # File Storage
+      - MM_FILESETTINGS_DRIVERNAME=local
+      - MM_FILESETTINGS_DIRECTORY=/mattermost/data
+      - MM_FILESETTINGS_MAXFILESIZE=52428800
+      
+      # Rate Limiting
+      - MM_RATESETTINGS_ENABLE=true
+      - MM_RATESETTINGS_PERSE=100
+      - MM_RATESETTINGS_MEMORYSTORE_SIZE=10000
+      
+      # Timezone
+      - MM_LOCALIZATIONSETTINGS_DEFAULTSERVERLOCALE=en
+      - MM_LOCALIZATIONSETTINGS_DEFAULTCLIENTLOCALE=en
+      
+    volumes:
+      - mattermost-data:/mattermost/data
+      - mattermost-config:/mattermost/config
+      - mattermost-logs:/mattermost/logs
+      - mattermost-plugins:/mattermost/plugins
+      - mattermost-client-plugins:/mattermost/client/plugins
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - orient-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8065/api/v4/system/ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: orient-mattermost-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=mattermost_user
+      - POSTGRES_PASSWORD=${MATTERMOST_DB_PASSWORD:-mattermost_password_2024}
+      - POSTGRES_DB=mattermost
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - mattermost-db:/var/lib/postgresql/data
+    networks:
+      - orient-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mattermost_user -d mattermost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  mattermost-data:
+    driver: local
+  mattermost-config:
+    driver: local
+  mattermost-logs:
+    driver: local
+  mattermost-plugins:
+    driver: local
+  mattermost-client-plugins:
+    driver: local
+  mattermost-db:
+    driver: local
+
+networks:
+  orient-network:
+    external: true
+    name: orient-network
+

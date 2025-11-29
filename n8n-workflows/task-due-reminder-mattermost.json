@@ -1,0 +1,184 @@
+{
+  "name": "Task Due Reminder with Mattermost",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT \n  t.id,\n  t.title,\n  t.due_date,\n  t.priority,\n  t.status,\n  u.id as assignee_id,\n  u.email as assignee_email,\n  u.full_name as assignee_name,\n  u.username as assignee_username,\n  CASE \n    WHEN t.due_date < CURRENT_DATE THEN 'overdue'\n    WHEN t.due_date = CURRENT_DATE THEN 'due_today'\n    WHEN t.due_date <= CURRENT_DATE + INTERVAL '1 day' THEN 'due_1_day'\n    WHEN t.due_date <= CURRENT_DATE + INTERVAL '3 days' THEN 'due_3_days'\n  END as urgency_level\nFROM administrative_tasks t\nLEFT JOIN users u ON t.assigned_to_id = u.id\nWHERE t.status IN ('pending', 'in_progress')\n  AND t.due_date IS NOT NULL\n  AND (\n    t.due_date < CURRENT_DATE + INTERVAL '3 days'\n    OR t.due_date = CURRENT_DATE\n  )\nORDER BY t.due_date ASC",
+        "additionalFields": {}
+      },
+      "name": "Get Tasks Due Soon",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Translation DB Connection"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Group tasks by urgency level and format for Mattermost\nconst tasks = $input.all();\n\nif (tasks.length === 0) {\n  return {\n    json: {\n      hasTasks: false,\n      message: \"No tasks due soon\"\n    }\n  };\n}\n\n// Group by urgency\nconst grouped = {};\ntasks.forEach(task => {\n  const level = task.json.urgency_level || 'due_3_days';\n  if (!grouped[level]) {\n    grouped[level] = [];\n  }\n  grouped[level].push(task.json);\n});\n\n// Format message\nconst attachments = [];\nconst colors = {\n  'overdue': '#FF6B6B',\n  'due_today': '#FFD93D',\n  'due_1_day': '#FFA500',\n  'due_3_days': '#4ECDC4'\n};\n\nconst titles = {\n  'overdue': '⚠️ Overdue Tasks',\n  'due_today': '📋 Tasks Due Today',\n  'due_1_day': '⏰ Tasks Due Tomorrow',\n  'due_3_days': '📅 Tasks Due in 3 Days'\n};\n\nObject.keys(grouped).forEach(level => {\n  const tasksInLevel = grouped[level];\n  const fields = tasksInLevel.map(task => ({\n    short: true,\n    title: task.title || 'Untitled Task',\n    value: `@${task.assignee_username || 'unassigned'}\\nDue: ${task.due_date || 'N/A'}\\nPriority: ${task.priority || 'normal'}`\n  }));\n  \n  attachments.push({\n    color: colors[level] || '#4ECDC4',\n    title: titles[level] || `Tasks - ${level}`,\n    fields: fields.slice(0, 10), // Limit to 10 tasks per attachment\n    footer: `Total: ${tasksInLevel.length} task(s)`,\n    ts: Math.floor(Date.now() / 1000)\n  });\n});\n\n// Determine channel based on urgency\nlet channel = '#tasks-general';\nif (grouped['overdue'] && grouped['overdue'].length > 0) {\n  channel = '#tasks-urgent';\n} else if (grouped['due_today'] && grouped['due_today'].length > 0) {\n  channel = '#tasks-urgent';\n}\n\nreturn {\n  json: {\n    text: `📋 **Task Reminder**\\n\\nYou have ${tasks.length} task(s) requiring attention.`,\n    channel: channel,\n    attachments: attachments,\n    totalTasks: tasks.length\n  }\n};"
+      },
+      "name": "Format Mattermost Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.hasTasks }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "name": "Has Tasks?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "postMessage",
+        "channel": "={{ $json.channel }}",
+        "text": "={{ $json.text }}",
+        "attachments": "={{ $json.attachments }}"
+      },
+      "name": "Send to Mattermost",
+      "type": "n8n-nodes-base.mattermost",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "mattermostApi": {
+          "id": "1",
+          "name": "Mattermost Connection"
+        }
+      },
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "to": "={{ $json.assignee_email }}",
+        "subject": "📋 Task Reminder: Tasks Due Soon",
+        "html": "<h2>Task Reminder</h2><p>You have tasks due soon. Please check Mattermost for details.</p>"
+      },
+      "name": "Send Email (Optional)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [1120, 500],
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log execution\nconst data = $input.all()[0].json;\n\nreturn {\n  json: {\n    workflow_name: 'task-due-reminder',\n    execution_id: $execution.id,\n    node_name: 'task-reminder-complete',\n    status: 'success',\n    total_tasks: data.totalTasks || 0,\n    channel: data.channel || '#tasks-general',\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "name": "Log Execution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Tasks Due Soon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Tasks Due Soon": {
+      "main": [
+        [
+          {
+            "node": "Format Mattermost Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Mattermost Message": {
+      "main": [
+        [
+          {
+            "node": "Has Tasks?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Tasks?": {
+      "main": [
+        [
+          {
+            "node": "Send to Mattermost",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Email (Optional)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Mattermost": {
+      "main": [
+        [
+          {
+            "node": "Log Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1"
+}
+

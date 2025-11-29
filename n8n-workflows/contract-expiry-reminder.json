@@ -1,0 +1,210 @@
+{
+  "name": "Contract Expiry Reminder",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Daily Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT \n  c.id,\n  c.contract_number,\n  c.status,\n  c.start_date,\n  c.total_amount,\n  c.signed_at,\n  c.created_at,\n  c.updated_at,\n  u.id as creator_id,\n  u.email as creator_email,\n  u.full_name as creator_name,\n  u.username as creator_username,\n  t.id as translator_id,\n  t.full_name as translator_name,\n  t.email as translator_email,\n  w.name as work_name,\n  w.id as work_id,\n  CASE \n    WHEN c.signed_at IS NOT NULL AND c.signed_at + INTERVAL '1 year' < CURRENT_DATE THEN 'expired'\n    WHEN c.signed_at IS NOT NULL AND c.signed_at + INTERVAL '1 year' <= CURRENT_DATE + INTERVAL '30 days' THEN 'expiring_30_days'\n    WHEN c.signed_at IS NOT NULL AND c.signed_at + INTERVAL '1 year' <= CURRENT_DATE + INTERVAL '7 days' THEN 'expiring_7_days'\n    WHEN c.signed_at IS NULL AND c.start_date + INTERVAL '1 year' < CURRENT_DATE THEN 'unsigned_expired'\n    WHEN c.signed_at IS NULL AND c.start_date + INTERVAL '1 year' <= CURRENT_DATE + INTERVAL '30 days' THEN 'unsigned_expiring_30_days'\n    WHEN c.signed_at IS NULL AND c.start_date + INTERVAL '1 year' <= CURRENT_DATE + INTERVAL '7 days' THEN 'unsigned_expiring_7_days'\n    ELSE NULL\n  END as expiry_status,\n  COALESCE(c.signed_at::date, c.start_date) + INTERVAL '1 year' as expiry_date\nFROM translation_contracts c\nLEFT JOIN users u ON c.created_by_id = u.id\nLEFT JOIN translators t ON c.translator_id = t.id\nLEFT JOIN translation_works w ON c.work_id = w.id\nWHERE c.status IN ('signed', 'active', 'pending')\n  AND (\n    (c.signed_at IS NOT NULL AND c.signed_at + INTERVAL '1 year' <= CURRENT_DATE + INTERVAL '30 days')\n    OR (c.signed_at IS NULL AND c.start_date + INTERVAL '1 year' <= CURRENT_DATE + INTERVAL '30 days')\n  )\nORDER BY expiry_date ASC",
+        "additionalFields": {}
+      },
+      "name": "Get Contracts Expiring Soon",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format contract expiry data for notifications\nconst contracts = $input.all();\n\nif (contracts.length === 0) {\n  return {\n    json: {\n      hasContracts: false,\n      message: \"No contracts expiring soon\",\n      execution_id: $execution.id || `exec_${Date.now()}`\n    }\n  };\n}\n\n// Group by expiry status\nconst grouped = {};\ncontracts.forEach(contract => {\n  const status = contract.json.expiry_status || 'expiring_30_days';\n  if (!grouped[status]) {\n    grouped[status] = [];\n  }\n  grouped[status].push(contract.json);\n});\n\n// Format Mattermost attachments\nconst attachments = [];\nconst colors = {\n  'expired': '#FF6B6B',\n  'unsigned_expired': '#FF6B6B',\n  'expiring_7_days': '#FFD93D',\n  'unsigned_expiring_7_days': '#FFD93D',\n  'expiring_30_days': '#FFA500',\n  'unsigned_expiring_30_days': '#FFA500'\n};\n\nconst titles = {\n  'expired': '⚠️ Expired Contracts',\n  'unsigned_expired': '⚠️ Unsigned Expired Contracts',\n  'expiring_7_days': '🔴 Contracts Expiring in 7 Days',\n  'unsigned_expiring_7_days': '🔴 Unsigned Contracts Expiring in 7 Days',\n  'expiring_30_days': '🟡 Contracts Expiring in 30 Days',\n  'unsigned_expiring_30_days': '🟡 Unsigned Contracts Expiring in 30 Days'\n};\n\nObject.keys(grouped).forEach(status => {\n  const contractsInGroup = grouped[status];\n  const fields = contractsInGroup.slice(0, 10).map(contract => ({\n    short: true,\n    title: contract.contract_number || 'N/A',\n    value: `${contract.work_name || 'N/A'}\\nExpires: ${contract.expiry_date || 'N/A'}\\nStatus: ${contract.status || 'N/A'}`\n  }));\n  \n  attachments.push({\n    color: colors[status] || '#4ECDC4',\n    title: titles[status] || `Contracts - ${status}`,\n    fields: fields,\n    footer: `Total: ${contractsInGroup.length} contract(s)`,\n    ts: Math.floor(Date.now() / 1000)\n  });\n});\n\n// Determine channel\nlet channel = '#contracts-expiry';\nif (grouped['expired'] || grouped['unsigned_expired'] || grouped['expiring_7_days'] || grouped['unsigned_expiring_7_days']) {\n  channel = '#contracts-urgent';\n}\n\n// Count by status\nconst expiredCount = (grouped['expired'] || []).length + (grouped['unsigned_expired'] || []).length;\nconst expiring7DaysCount = (grouped['expiring_7_days'] || []).length + (grouped['unsigned_expiring_7_days'] || []).length;\nconst expiring30DaysCount = (grouped['expiring_30_days'] || []).length + (grouped['unsigned_expiring_30_days'] || []).length;\n\n// Format email data\nconst emailHtml = `\n<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;\">\n  <h2 style=\"color: #333; border-bottom: 2px solid #FF6B6B; padding-bottom: 10px;\">⚠️ Contract Expiry Reminder</h2>\n  \n  <p>You have <strong>${contracts.length}</strong> contract(s) expiring soon:</p>\n  \n  <ul style=\"list-style: none; padding: 0;\">\n    ${expiredCount > 0 ? `<li style=\"color: #FF6B6B; margin: 10px 0;\"><strong>${expiredCount} expired contract(s)</strong></li>` : ''}\n    ${expiring7DaysCount > 0 ? `<li style=\"color: #FFD93D; margin: 10px 0;\"><strong>${expiring7DaysCount} contract(s) expiring in 7 days</strong></li>` : ''}\n    ${expiring30DaysCount > 0 ? `<li style=\"color: #FFA500; margin: 10px 0;\"><strong>${expiring30DaysCount} contract(s) expiring in 30 days</strong></li>` : ''}\n  </ul>\n  \n  <table style=\"width: 100%; border-collapse: collapse; margin: 20px 0; background: #f9f9f9;\">\n    <thead>\n      <tr style=\"background: #4ECDC4; color: white;\">\n        <th style=\"padding: 12px; text-align: left;\">Contract Number</th>\n        <th style=\"padding: 12px; text-align: left;\">Work</th>\n        <th style=\"padding: 12px; text-align: left;\">Expiry Date</th>\n        <th style=\"padding: 12px; text-align: left;\">Status</th>\n      </tr>\n    </thead>\n    <tbody>\n      ${contracts.map(contract => {\n        const urgencyColor = contract.json.expiry_status?.includes('expired') ? '#FF6B6B' : \n                            contract.json.expiry_status?.includes('7_days') ? '#FFD93D' : '#FFA500';\n        return `\n        <tr>\n          <td style=\"padding: 12px; border-bottom: 1px solid #ddd;\">${contract.json.contract_number || 'N/A'}</td>\n          <td style=\"padding: 12px; border-bottom: 1px solid #ddd;\">${contract.json.work_name || 'N/A'}</td>\n          <td style=\"padding: 12px; border-bottom: 1px solid #ddd; color: ${urgencyColor};\"><strong>${contract.json.expiry_date || 'N/A'}</strong></td>\n          <td style=\"padding: 12px; border-bottom: 1px solid #ddd;\">${contract.json.status || 'N/A'}</td>\n        </tr>`;\n      }).join('')}\n    </tbody>\n  </table>\n  \n  <p style=\"margin-top: 30px;\">Please review and take necessary actions.</p>\n  \n  <p style=\"margin-top: 30px;\">Best regards,<br><strong>OrientClassicsManager System</strong></p>\n</div>\n`;\n\n// Get unique recipients (creators and translators)\nconst recipients = new Map();\ncontracts.forEach(contract => {\n  if (contract.json.creator_email) {\n    recipients.set(contract.json.creator_email, {\n      email: contract.json.creator_email,\n      name: contract.json.creator_name,\n      role: 'creator',\n      contracts: []\n    });\n  }\n  if (contract.json.translator_email) {\n    recipients.set(contract.json.translator_email, {\n      email: contract.json.translator_email,\n      name: contract.json.translator_name,\n      role: 'translator',\n      contracts: []\n    });\n  }\n});\n\n// Assign contracts to recipients\ncontracts.forEach(contract => {\n  if (contract.json.creator_email && recipients.has(contract.json.creator_email)) {\n    recipients.get(contract.json.creator_email).contracts.push(contract.json);\n  }\n  if (contract.json.translator_email && recipients.has(contract.json.translator_email)) {\n    recipients.get(contract.json.translator_email).contracts.push(contract.json);\n  }\n});\n\nreturn {\n  json: {\n    hasContracts: true,\n    totalContracts: contracts.length,\n    expiredCount: expiredCount,\n    expiring7DaysCount: expiring7DaysCount,\n    expiring30DaysCount: expiring30DaysCount,\n    // Mattermost data\n    mattermost_text: `⚠️ **Contract Expiry Reminder**\\n\\nYou have ${contracts.length} contract(s) expiring soon.`,\n    mattermost_channel: channel,\n    mattermost_attachments: attachments,\n    // Email data\n    email_html: emailHtml,\n    email_subject: `⚠️ Contract Expiry Reminder: ${expiredCount > 0 ? expiredCount + ' Expired' : ''} ${expiring7DaysCount > 0 ? expiring7DaysCount + ' Expiring in 7 Days' : ''} ${contracts.length} Total`,\n    recipients: Array.from(recipients.values()),\n    // Execution tracking\n    execution_id: $execution.id || `exec_${Date.now()}`,\n    workflow_name: 'Contract Expiry Reminder'\n  }\n};"
+      },
+      "name": "Format Contract Expiry Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.hasContracts }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "name": "Has Contracts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "postMessage",
+        "channel": "={{ $json.mattermost_channel }}",
+        "text": "={{ $json.mattermost_text }}",
+        "attachments": "={{ $json.mattermost_attachments }}"
+      },
+      "name": "Send Mattermost Notification",
+      "type": "n8n-nodes-base.mattermost",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "mattermostApi": {
+          "id": "1",
+          "name": "Mattermost Connection"
+        }
+      },
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format email for each recipient\nconst recipient = $json;\nconst notificationData = $node['Format Contract Expiry Data'].json || {};\n\n// Filter contracts for this recipient\nconst recipientContracts = recipient.contracts || [];\n\nconst emailHtml = `\n<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;\">\n  <h2 style=\"color: #333; border-bottom: 2px solid #FF6B6B; padding-bottom: 10px;\">⚠️ Contract Expiry Reminder</h2>\n  \n  <p>Dear ${recipient.name},</p>\n  \n  <p>You have <strong>${recipientContracts.length}</strong> contract(s) expiring soon:</p>\n  \n  <table style=\"width: 100%; border-collapse: collapse; margin: 20px 0; background: #f9f9f9;\">\n    <thead>\n      <tr style=\"background: #4ECDC4; color: white;\">\n        <th style=\"padding: 12px; text-align: left;\">Contract Number</th>\n        <th style=\"padding: 12px; text-align: left;\">Work</th>\n        <th style=\"padding: 12px; text-align: left;\">Expiry Date</th>\n        <th style=\"padding: 12px; text-align: left;\">Status</th>\n      </tr>\n    </thead>\n    <tbody>\n      ${recipientContracts.map(contract => {\n        const urgencyColor = contract.expiry_status?.includes('expired') ? '#FF6B6B' : \n                            contract.expiry_status?.includes('7_days') ? '#FFD93D' : '#FFA500';\n        return `\n        <tr>\n          <td style=\"padding: 12px; border-bottom: 1px solid #ddd;\">${contract.contract_number || 'N/A'}</td>\n          <td style=\"padding: 12px; border-bottom: 1px solid #ddd;\">${contract.work_name || 'N/A'}</td>\n          <td style=\"padding: 12px; border-bottom: 1px solid #ddd; color: ${urgencyColor};\"><strong>${contract.expiry_date || 'N/A'}</strong></td>\n          <td style=\"padding: 12px; border-bottom: 1px solid #ddd;\">${contract.status || 'N/A'}</td>\n        </tr>`;\n      }).join('')}\n    </tbody>\n  </table>\n  \n  <p style=\"margin-top: 30px;\">Please review and take necessary actions.</p>\n  \n  <p style=\"margin-top: 30px;\">Best regards,<br><strong>OrientClassicsManager System</strong></p>\n</div>\n`;\n\nreturn {\n  json: {\n    to: recipient.email,\n    subject: `⚠️ Contract Expiry Reminder: ${recipientContracts.length} contract(s) require attention`,\n    html: emailHtml,\n    recipient_name: recipient.name,\n    contract_count: recipientContracts.length\n  }\n};"
+      },
+      "name": "Format Recipient Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "to": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}"
+      },
+      "name": "Send Email to Recipient",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [1340, 500],
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT log_workflow_execution('{{ $node[\"Format Contract Expiry Data\"].json.workflow_name }}', '{{ $node[\"Format Contract Expiry Data\"].json.execution_id }}', 'Send Expiry Notifications', 'notification', 'success', '{{ JSON.stringify({total_contracts: $node[\"Format Contract Expiry Data\"].json.totalContracts, expired: $node[\"Format Contract Expiry Data\"].json.expiredCount, expiring_7_days: $node[\"Format Contract Expiry Data\"].json.expiring7DaysCount}) }}'::jsonb, NULL, NULL, NULL, NULL) as log_id",
+        "additionalFields": {}
+      },
+      "name": "Log Execution",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1560, 400]
+    }
+  ],
+  "connections": {
+    "Daily Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Contracts Expiring Soon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Contracts Expiring Soon": {
+      "main": [
+        [
+          {
+            "node": "Format Contract Expiry Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Contract Expiry Data": {
+      "main": [
+        [
+          {
+            "node": "Has Contracts?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Contracts?": {
+      "main": [
+        [
+          {
+            "node": "Send Mattermost Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Recipient Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Recipient Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email to Recipient",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Mattermost Notification": {
+      "main": [
+        [
+          {
+            "node": "Log Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email to Recipient": {
+      "main": [
+        [
+          {
+            "node": "Log Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1"
+}
+

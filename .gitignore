@@ -8,3 +8,19 @@ vite.config.ts.*
 .env.local
 .env.*.local
 uploads/
+
+# N8N runtime data
+n8n-data/
+
+# Database backups
+backups/
+
+# Virtual environments
+venv/
+venv-django/
+backend-django/venv-django/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python

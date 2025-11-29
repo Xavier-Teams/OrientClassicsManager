@@ -1,0 +1,210 @@
+{
+  "name": "Task Due Reminder - Complete Multi-Platform",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Daily Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT \n  t.id,\n  t.title,\n  t.description,\n  t.due_date,\n  t.priority,\n  t.status,\n  t.work_group,\n  u.id as assignee_id,\n  u.email as assignee_email,\n  u.full_name as assignee_name,\n  u.username as assignee_username,\n  CASE \n    WHEN t.due_date < CURRENT_DATE THEN 'overdue'\n    WHEN t.due_date = CURRENT_DATE THEN 'due_today'\n    WHEN t.due_date <= CURRENT_DATE + INTERVAL '1 day' THEN 'due_1_day'\n    WHEN t.due_date <= CURRENT_DATE + INTERVAL '3 days' THEN 'due_3_days'\n    ELSE 'due_soon'\n  END as urgency_level,\n  EXTRACT(DAY FROM (t.due_date - CURRENT_DATE)) as days_until_due\nFROM work_tasks t\nLEFT JOIN work_tasks_assigned_to wta ON t.id = wta.worktask_id\nLEFT JOIN users u ON wta.user_id = u.id\nWHERE t.is_active = true\n  AND t.status IN ('chua_bat_dau', 'dang_tien_hanh')\n  AND t.due_date IS NOT NULL\n  AND (\n    t.due_date < CURRENT_DATE + INTERVAL '3 days'\n    OR t.due_date = CURRENT_DATE\n  )\nORDER BY t.due_date ASC, t.priority DESC",
+        "additionalFields": {}
+      },
+      "name": "Get Tasks Due Soon",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Group tasks by urgency and work_group, format for notifications\nconst tasks = $input.all();\n\nif (tasks.length === 0) {\n  return {\n    json: {\n      hasTasks: false,\n      message: \"No tasks due soon\",\n      execution_id: $execution.id || `exec_${Date.now()}`\n    }\n  };\n}\n\n// Group by urgency and work_group\nconst grouped = {};\ntasks.forEach(task => {\n  const level = task.json.urgency_level || 'due_3_days';\n  const group = task.json.work_group || 'chung';\n  const key = `${level}_${group}`;\n  \n  if (!grouped[key]) {\n    grouped[key] = {\n      urgency: level,\n      work_group: group,\n      tasks: []\n    };\n  }\n  grouped[key].tasks.push(task.json);\n});\n\n// Format for Mattermost\nconst attachments = [];\nconst colors = {\n  'overdue': '#FF6B6B',\n  'due_today': '#FFD93D',\n  'due_1_day': '#FFA500',\n  'due_3_days': '#4ECDC4',\n  'due_soon': '#95E1D3'\n};\n\nconst titles = {\n  'overdue': '⚠️ Overdue Tasks',\n  'due_today': '📋 Tasks Due Today',\n  'due_1_day': '⏰ Tasks Due Tomorrow',\n  'due_3_days': '📅 Tasks Due in 3 Days',\n  'due_soon': '📆 Tasks Due Soon'\n};\n\nconst workGroupChannels = {\n  'bien_tap': '#tasks-bien-tap',\n  'hanh_chinh': '#tasks-hanh-chinh',\n  'chung': '#tasks-general',\n  'default': '#tasks-general'\n};\n\n// Determine primary channel\nlet primaryChannel = '#tasks-general';\nlet hasUrgent = false;\n\nObject.keys(grouped).forEach(key => {\n  const group = grouped[key];\n  const level = group.urgency;\n  \n  if (level === 'overdue' || level === 'due_today') {\n    hasUrgent = true;\n    primaryChannel = '#tasks-urgent';\n  }\n  \n  const tasksInGroup = group.tasks;\n  const fields = tasksInGroup.slice(0, 10).map(task => ({\n    short: true,\n    title: task.title || 'Untitled Task',\n    value: `@${task.assignee_username || 'unassigned'}\\nDue: ${task.due_date || 'N/A'}\\nPriority: ${task.priority || 'normal'}`\n  }));\n  \n  attachments.push({\n    color: colors[level] || '#4ECDC4',\n    title: `${titles[level] || 'Tasks'} - ${group.work_group}`,\n    fields: fields,\n    footer: `Total: ${tasksInGroup.length} task(s)`,\n    ts: Math.floor(Date.now() / 1000)\n  });\n});\n\n// Format email data\nconst emailTasks = tasks.map(t => t.json);\nconst overdueCount = emailTasks.filter(t => t.urgency_level === 'overdue').length;\nconst dueTodayCount = emailTasks.filter(t => t.urgency_level === 'due_today').length;\n\nreturn {\n  json: {\n    hasTasks: true,\n    totalTasks: tasks.length,\n    overdueCount: overdueCount,\n    dueTodayCount: dueTodayCount,\n    // Mattermost data\n    mattermost_text: `📋 **Task Reminder**\\n\\nYou have ${tasks.length} task(s) requiring attention.`,\n    mattermost_channel: primaryChannel,\n    mattermost_attachments: attachments,\n    // Email data\n    email_subject: `📋 Task Reminder: ${overdueCount > 0 ? overdueCount + ' Overdue' : ''} ${dueTodayCount > 0 ? dueTodayCount + ' Due Today' : ''} ${tasks.length} Total`,\n    email_tasks: emailTasks,\n    // Group by assignee for individual emails\n    assignees: [...new Set(emailTasks.map(t => t.assignee_id).filter(Boolean))].map(id => {\n      const assigneeTasks = emailTasks.filter(t => t.assignee_id === id);\n      const assignee = assigneeTasks[0];\n      return {\n        assignee_id: id,\n        assignee_email: assignee.assignee_email,\n        assignee_name: assignee.assignee_name,\n        tasks: assigneeTasks\n      };\n    }),\n    // Execution tracking\n    execution_id: $execution.id || `exec_${Date.now()}`,\n    workflow_name: 'Task Due Reminder'\n  }\n};"
+      },
+      "name": "Format Task Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.hasTasks }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "name": "Has Tasks?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "postMessage",
+        "channel": "={{ $json.mattermost_channel }}",
+        "text": "={{ $json.mattermost_text }}",
+        "attachments": "={{ $json.mattermost_attachments }}"
+      },
+      "name": "Send Mattermost Notification",
+      "type": "n8n-nodes-base.mattermost",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "mattermostApi": {
+          "id": "1",
+          "name": "Mattermost Connection"
+        }
+      },
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format email for each assignee\nconst assignee = $json;\n\nconst emailHtml = `\n<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;\">\n  <h2 style=\"color: #333; border-bottom: 2px solid #4ECDC4; padding-bottom: 10px;\">📋 Task Reminder</h2>\n  \n  <p>Dear ${assignee.assignee_name},</p>\n  \n  <p>You have <strong>${assignee.tasks.length}</strong> task(s) requiring your attention:</p>\n  \n  <table style=\"width: 100%; border-collapse: collapse; margin: 20px 0; background: #f9f9f9;\">\n    <thead>\n      <tr style=\"background: #4ECDC4; color: white;\">\n        <th style=\"padding: 12px; text-align: left;\">Task</th>\n        <th style=\"padding: 12px; text-align: left;\">Due Date</th>\n        <th style=\"padding: 12px; text-align: left;\">Priority</th>\n        <th style=\"padding: 12px; text-align: left;\">Status</th>\n      </tr>\n    </thead>\n    <tbody>\n      ${assignee.tasks.map(task => {\n        const urgencyColor = task.urgency_level === 'overdue' ? '#FF6B6B' : \n                            task.urgency_level === 'due_today' ? '#FFD93D' : '#4ECDC4';\n        return `\n        <tr>\n          <td style=\"padding: 12px; border-bottom: 1px solid #ddd;\">${task.title || 'Untitled'}</td>\n          <td style=\"padding: 12px; border-bottom: 1px solid #ddd; color: ${urgencyColor};\"><strong>${task.due_date || 'N/A'}</strong></td>\n          <td style=\"padding: 12px; border-bottom: 1px solid #ddd;\">${task.priority || 'normal'}</td>\n          <td style=\"padding: 12px; border-bottom: 1px solid #ddd;\">${task.status || 'pending'}</td>\n        </tr>`;\n      }).join('')}\n    </tbody>\n  </table>\n  \n  <p style=\"margin-top: 30px;\">Please review and complete these tasks as soon as possible.</p>\n  \n  <p style=\"margin-top: 30px;\">Best regards,<br><strong>OrientClassicsManager System</strong></p>\n</div>\n`;\n\nreturn {\n  json: {\n    to: assignee.assignee_email,\n    subject: `📋 Task Reminder: ${assignee.tasks.length} task(s) require attention`,\n    html: emailHtml,\n    assignee_name: assignee.assignee_name,\n    task_count: assignee.tasks.length\n  }\n};"
+      },
+      "name": "Format Assignee Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "to": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}"
+      },
+      "name": "Send Email to Assignee",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [1340, 500],
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT log_workflow_execution('{{ $node[\"Format Task Data\"].json.workflow_name }}', '{{ $node[\"Format Task Data\"].json.execution_id }}', 'Send Notifications', 'notification', 'success', '{{ JSON.stringify({total_tasks: $node[\"Format Task Data\"].json.totalTasks, overdue: $node[\"Format Task Data\"].json.overdueCount}) }}'::jsonb, NULL, NULL, NULL, NULL) as log_id",
+        "additionalFields": {}
+      },
+      "name": "Log Execution",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1560, 400]
+    }
+  ],
+  "connections": {
+    "Daily Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Tasks Due Soon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Tasks Due Soon": {
+      "main": [
+        [
+          {
+            "node": "Format Task Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Task Data": {
+      "main": [
+        [
+          {
+            "node": "Has Tasks?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Tasks?": {
+      "main": [
+        [
+          {
+            "node": "Send Mattermost Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Assignee Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Assignee Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email to Assignee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Mattermost Notification": {
+      "main": [
+        [
+          {
+            "node": "Log Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email to Assignee": {
+      "main": [
+        [
+          {
+            "node": "Log Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1"
+}
+

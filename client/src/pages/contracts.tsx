@@ -423,7 +423,7 @@ export default function Contracts() {
           typeof data.final_payment === "number"
             ? data.final_payment.toString()
             : data.final_payment || "0",
-        status: data.status || "draft",
+        status: data.status === "pending_approval" ? "pending" : (data.status || "draft"),
         signed_at: data.signed_at || undefined,
         contract_file:
           data.contract_file instanceof File ? data.contract_file : undefined,
@@ -487,7 +487,7 @@ export default function Contracts() {
         advance_payment_1: advance1,
         advance_payment_2: advance2,
         final_payment: final,
-        status: data.status,
+        status: data.status === "pending_approval" ? "pending" : data.status,
         signed_at: data.signed_at || undefined,
         contract_file:
           data.contract_file instanceof File ? data.contract_file : undefined,

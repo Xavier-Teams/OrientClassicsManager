@@ -1,0 +1,908 @@
+{
+  "name": "Contract Multi-Level Approval - Ready",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "contract-approval",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Contract Submitted",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate and format contract_id\n// Webhook POST data can be in different locations\nconst input = $input.all()[0].json;\nconst contractId = input.contract_id || input.body?.contract_id || input.query?.contract_id || (input.body && typeof input.body === 'string' ? JSON.parse(input.body).contract_id : null);\n\nconsole.log('Webhook input:', JSON.stringify(input, null, 2));\nconsole.log('Extracted contract_id:', contractId);\n\nif (!contractId || contractId === '' || contractId === 'null' || contractId === null || contractId === undefined) {\n  throw new Error('contract_id is required and cannot be empty. Received: ' + JSON.stringify(input));\n}\n\nreturn {\n  json: {\n    contract_id: String(contractId).trim()\n  }\n};"
+      },
+      "name": "Validate Contract ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT c.*, COALESCE(u.email, '') as creator_email, COALESCE(u.full_name, 'Unknown') as creator_name, COALESCE(u.id, c.created_by_id) as creator_id FROM translation_contracts c LEFT JOIN users u ON c.created_by_id = u.id WHERE c.id = CAST('{{ $json.contract_id }}' AS BIGINT) OR c.contract_number = '{{ $json.contract_id }}'",
+        "additionalFields": {}
+      },
+      "name": "Get Contract Details",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "name": "Contract Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Return error response if contract not found\nconst contractId = $node['Validate Contract ID'].json.contract_id;\n\nreturn {\n  json: {\n    success: false,\n    message: `Contract with ID ${contractId} not found. Please verify the contract exists in the database.`,\n    contract_id: contractId,\n    error: 'CONTRACT_NOT_FOUND'\n  }\n};"
+      },
+      "name": "Contract Not Found Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format data for approval workflow insert\n// Ensure all required fields have values\n// Handle foreign key constraints - only set user IDs if they are valid (not 0, null, or undefined)\nconst contract = $json;\n\n// Helper function to validate user ID\nfunction getValidUserId(...ids) {\n  for (const id of ids) {\n    if (id !== null && id !== undefined && id !== 0 && id !== '0' && id !== '') {\n      const numId = Number(id);\n      if (!isNaN(numId) && numId > 0) {\n        return numId;\n      }\n    }\n  }\n  return null; // Return null instead of 0 for foreign key\n}\n\nconst userId = getValidUserId(contract.creator_id, contract.created_by_id);\n\nreturn {\n  json: {\n    document_type: 'contract',\n    document_id: contract.id,\n    workflow_name: `Contract Approval - ${contract.contract_number || 'N/A'}`,\n    total_steps: 2,\n    created_by_id: userId,\n    assigned_to_id: userId,\n    status: 'in_progress',\n    // Keep original data for next nodes\n    contract_id: contract.id,\n    contract_number: contract.contract_number,\n    creator_id: contract.creator_id || contract.created_by_id || null,\n    creator_name: contract.creator_name,\n    creator_email: contract.creator_email,\n    total_amount: contract.total_amount\n  }\n};"
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT level_number, level_name, role_id, timeout_hours FROM workflow_levels WHERE document_type = 'contract' AND is_required = TRUE ORDER BY level_number",
+        "additionalFields": {}
+      },
+      "name": "Get Workflow Levels",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format data for approval workflow insert\n// Get total_steps dynamically from workflow_levels\n// Ensure all required fields have values\n// Handle foreign key constraints - only set user IDs if they are valid (not 0, null, or undefined)\nconst contract = $node['Get Contract Details'].json || {};\nconst workflowLevels = $node['Get Workflow Levels'].json || [];\n\n// Helper function to validate user ID\nfunction getValidUserId(...ids) {\n  for (const id of ids) {\n    if (id !== null && id !== undefined && id !== 0 && id !== '0' && id !== '') {\n      const numId = Number(id);\n      if (!isNaN(numId) && numId > 0) {\n        return numId;\n      }\n    }\n  }\n  return null; // Return null instead of 0 for foreign key\n}\n\nconst userId = getValidUserId(contract.creator_id, contract.created_by_id);\n\n// Get total_steps from workflow_levels (dynamic)\nconst totalSteps = Array.isArray(workflowLevels) ? workflowLevels.length : 0;\n\n// Get first level info\nconst firstLevel = Array.isArray(workflowLevels) && workflowLevels.length > 0 ? workflowLevels[0] : null;\n\nreturn {\n  json: {\n    document_type: 'contract',\n    document_id: contract.id,\n    workflow_name: `Contract Approval - ${contract.contract_number || 'N/A'}`,\n    total_steps: totalSteps || 1, // Default to 1 if no levels found\n    current_step: 1, // Always start at step 1\n    created_by_id: userId,\n    assigned_to_id: userId,\n    status: 'in_progress',\n    // Keep original data for next nodes\n    contract_id: contract.id,\n    contract_number: contract.contract_number,\n    creator_id: contract.creator_id || contract.created_by_id || null,\n    creator_name: contract.creator_name,\n    creator_email: contract.creator_email,\n    total_amount: contract.total_amount,\n    // Workflow levels data\n    workflow_levels: workflowLevels,\n    current_level: firstLevel,\n    current_level_number: firstLevel ? firstLevel.level_number : 1,\n    current_level_role: firstLevel ? firstLevel.role_id : null,\n    current_level_name: firstLevel ? firstLevel.level_name : 'Level 1'\n  }\n};"
+      },
+      "name": "Format Approval Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "approval_workflows",
+        "columns": "document_type, document_id, workflow_name, total_steps, current_step, created_by_id, assigned_to_id, status",
+        "additionalFields": {
+          "values": "={{ $json.document_type }}, {{ $json.document_id }}, {{ $json.workflow_name }}, {{ $json.total_steps }}, {{ $json.current_step }}, {{ $json.created_by_id }}, {{ $json.assigned_to_id }}, {{ $json.status }}"
+        },
+        "returnFields": "id"
+      },
+      "name": "Create Approval Workflow",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT u.id, u.email, u.full_name, u.role FROM users u WHERE u.role = '{{ $json.current_level_role }}' LIMIT 1",
+        "additionalFields": {}
+      },
+      "name": "Get Current Level Approver",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1560, 300],
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "larger"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "name": "Approver Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// No approver found - return error response\nconst contractDetails = $node['Get Contract Details'].json || {};\n\nreturn {\n  json: {\n    success: false,\n    message: 'No approver found. Please create a user with role: manager, truong_ban_thu_ky, or pho_chu_nhiem',\n    contract_id: contractDetails.id || contractDetails.contract_id,\n    contract_number: contractDetails.contract_number || 'N/A',\n    error: 'NO_APPROVER_FOUND'\n  }\n};"
+      },
+      "name": "No Approver Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate unique approval token\n// Use level info from workflow_levels\nconst crypto = require('crypto');\nconst token = crypto.randomBytes(32).toString('hex');\n\n// Get level info from Format Approval Data\nconst levelData = $node['Format Approval Data'].json || {};\nconst currentLevel = levelData.current_level || {};\nconst timeoutHours = currentLevel.timeout_hours || 48; // Default 48 hours\n\nconst expiryDate = new Date();\nexpiryDate.setHours(expiryDate.getHours() + timeoutHours);\n\nreturn {\n  json: {\n    approval_token: token,\n    expiry_date: expiryDate.toISOString(),\n    workflow_id: $node['Create Approval Workflow'].json.id,\n    contract_id: $node['Get Contract Details'].json.id || $node['Get Contract Details'].json.contract_id,\n    contract_number: $node['Get Contract Details'].json.contract_number,\n    approver_id: $json.id,\n    approver_email: $json.email,\n    approver_name: $json.full_name,\n    approver_role: $json.role,\n    creator_name: $node['Get Contract Details'].json.creator_name,\n    creator_email: $node['Get Contract Details'].json.creator_email,\n    total_amount: $node['Get Contract Details'].json.total_amount,\n    level: levelData.current_level_number || 1,\n    level_name: levelData.current_level_name || 'Level 1',\n    timeout_hours: timeoutHours\n  }\n};"
+      },
+      "name": "Generate Approval Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "approval_tokens",
+        "columns": "token, workflow_id, approver_id, step_number, decision, expiry_date",
+        "additionalFields": {
+          "values": "={{ $node['Generate Approval Token'].json.approval_token }}, {{ $node['Create Approval Workflow'].json.id }}, {{ $node['Generate Approval Token'].json.approver_id }}, 1, 'pending', {{ $node['Generate Approval Token'].json.expiry_date }}"
+        },
+        "returnFields": "*"
+      },
+      "name": "Save Approval Token",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "to": "={{ $node['Generate Approval Token'].json.approver_email }}",
+        "subject": "📋 Contract Approval Required - Level 1: {{ $node['Generate Approval Token'].json.contract_number }}",
+        "html": "<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\"><h2 style=\"color: #333;\">Contract Approval Request</h2><p>Dear {{ $node['Generate Approval Token'].json.approver_name }},</p><p>A new contract requires your approval:</p><table style=\"width: 100%; border-collapse: collapse; margin: 20px 0;\"><tr><td style=\"padding: 8px; border-bottom: 1px solid #ddd;\"><strong>Contract Number:</strong></td><td style=\"padding: 8px; border-bottom: 1px solid #ddd;\">{{ $node['Generate Approval Token'].json.contract_number }}</td></tr><tr><td style=\"padding: 8px; border-bottom: 1px solid #ddd;\"><strong>Created by:</strong></td><td style=\"padding: 8px; border-bottom: 1px solid #ddd;\">{{ $node['Generate Approval Token'].json.creator_name }}</td></tr><tr><td style=\"padding: 8px; border-bottom: 1px solid #ddd;\"><strong>Total Amount:</strong></td><td style=\"padding: 8px; border-bottom: 1px solid #ddd;\">{{ $node['Generate Approval Token'].json.total_amount }}</td></tr><tr><td style=\"padding: 8px;\"><strong>Approval Level:</strong></td><td style=\"padding: 8px;\">Level 1 - Manager</td></tr></table><p style=\"margin: 20px 0;\"><strong>Please review and take action:</strong></p><p style=\"margin: 20px 0;\"><a href=\"http://localhost:5678/webhook/contract-approval-decision?token={{ $node['Generate Approval Token'].json.approval_token }}&decision=approved\" style=\"background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin-right: 10px; display: inline-block;\">✅ Approve</a><a href=\"http://localhost:5678/webhook/contract-approval-decision?token={{ $node['Generate Approval Token'].json.approval_token }}&decision=rejected\" style=\"background-color: #f44336; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;\">❌ Reject</a></p><p style=\"color: #666; font-size: 12px; margin-top: 20px;\">This approval link will expire in 48 hours.</p><p>Best regards,<br>OrientClassicsManager System</p></div>"
+      },
+      "name": "Send Approval Email Level 1",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [2000, 300],
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "to": "={{ $node['Get Contract Details'].json.creator_email }}",
+        "subject": "🔔 Contract Submitted for Approval: {{ $node['Get Contract Details'].json.contract_number }}",
+        "html": "<h2>Contract Submitted</h2><p>Dear {{ $node['Get Contract Details'].json.creator_name }},</p><p>Your contract has been submitted for approval:</p><ul><li><strong>Contract Number:</strong> {{ $node['Get Contract Details'].json.contract_number }}</li><li><strong>Status:</strong> Pending Level 1 Approval (Manager)</li><li><strong>Submitted:</strong> {{ new Date().toLocaleString('vi-VN') }}</li></ul><p>You will receive updates as the approval process progresses.</p><p>Best regards,<br>OrientClassicsManager System</p>"
+      },
+      "name": "Send Confirmation to Creator",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [2220, 300],
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format response data from reliable nodes\n// Get data from nodes that should always succeed\n// Handle both success and error cases\nconst contractDetails = $node['Get Contract Details']?.json || {};\nconst approvalToken = $node['Generate Approval Token']?.json || {};\nconst noApproverError = $node['No Approver Error']?.json;\nconst contractNotFoundError = $node['Contract Not Found Error']?.json;\n\n// If there's an error, return it (prioritize contract not found)\nif (contractNotFoundError) {\n  return { json: contractNotFoundError };\n}\n\nif (noApproverError) {\n  return { json: noApproverError };\n}\n\n// Success case\nreturn {\n  json: {\n    success: true,\n    message: 'Contract approval request sent to Level 1 approver',\n    contract_id: contractDetails.id || contractDetails.contract_id,\n    contract_number: contractDetails.contract_number || 'N/A',\n    approver: approvalToken.approver_name || 'Manager',\n    workflow_id: $node['Create Approval Workflow']?.json?.id || null,\n    approval_token: approvalToken.approval_token || null\n  }\n};"
+      },
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2660, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "contract-approval-decision",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Approval Decision Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 600]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT at.*, aw.document_id, aw.document_type FROM approval_tokens at LEFT JOIN approval_workflows aw ON at.workflow_id = aw.id WHERE at.token = '{{ $query.token }}' AND at.expiry_date > NOW() AND at.used_at IS NULL",
+        "additionalFields": {}
+      },
+      "name": "Validate Token",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "Token Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 600]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "approval_tokens",
+        "updateKey": "token",
+        "columns": "decision, used_at",
+        "additionalFields": {
+          "values": "={{ $query.decision }}, {{ new Date().toISOString() }}"
+        }
+      },
+      "name": "Update Token Decision",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $query.decision }}",
+              "operation": "equal",
+              "value2": "approved"
+            }
+          ]
+        }
+      },
+      "name": "Decision Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT aw.*, wl.level_number as next_level_number, wl.level_name as next_level_name, wl.role_id as next_role_id, wl.timeout_hours as next_timeout_hours FROM approval_workflows aw INNER JOIN approval_tokens at ON aw.id = at.workflow_id LEFT JOIN workflow_levels wl ON wl.document_type = aw.document_type AND wl.level_number = aw.current_step + 1 AND wl.is_required = TRUE WHERE at.token = '{{ $query.token }}'",
+        "additionalFields": {}
+      },
+      "name": "Get Workflow and Next Level",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "larger"
+              }
+            },
+            {
+              "id": "condition2",
+              "leftValue": "={{ $json[0].next_level_number }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "name": "Has Next Level?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Progress to next level\n// Get workflow and next level info\nconst workflowData = $json[0] || {};\nconst currentStep = workflowData.current_step || 1;\nconst nextStep = currentStep + 1;\nconst nextLevel = {\n  level_number: workflowData.next_level_number,\n  level_name: workflowData.next_level_name,\n  role_id: workflowData.next_role_id,\n  timeout_hours: workflowData.next_timeout_hours || 48\n};\n\nreturn {\n  json: {\n    workflow_id: workflowData.id,\n    document_id: workflowData.document_id,\n    current_step: currentStep,\n    next_step: nextStep,\n    next_level: nextLevel,\n    has_next_level: true\n  }\n};"
+      },
+      "name": "Format Next Level Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "approval_workflows",
+        "updateKey": "id",
+        "columns": "current_step",
+        "additionalFields": {
+          "values": "={{ $json.next_step }}"
+        }
+      },
+      "name": "Update Workflow Step",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT u.id, u.email, u.full_name, u.role FROM users u WHERE u.role = '{{ $json.next_level.role_id }}' LIMIT 1",
+        "additionalFields": {}
+      },
+      "name": "Get Next Level Approver",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate token for next level\nconst crypto = require('crypto');\nconst token = crypto.randomBytes(32).toString('hex');\nconst nextLevel = $json.next_level || {};\nconst timeoutHours = nextLevel.timeout_hours || 48;\n\nconst expiryDate = new Date();\nexpiryDate.setHours(expiryDate.getHours() + timeoutHours);\n\nconst approver = $node['Get Next Level Approver'].json[0] || {};\n\nreturn {\n  json: {\n    approval_token: token,\n    expiry_date: expiryDate.toISOString(),\n    workflow_id: $json.workflow_id,\n    document_id: $json.document_id,\n    step_number: $json.next_step,\n    approver_id: approver.id,\n    approver_email: approver.email,\n    approver_name: approver.full_name,\n    approver_role: approver.role,\n    level_number: nextLevel.level_number,\n    level_name: nextLevel.level_name,\n    timeout_hours: timeoutHours\n  }\n};"
+      },
+      "name": "Generate Next Level Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "approval_tokens",
+        "columns": "token, workflow_id, approver_id, step_number, decision, expiry_date",
+        "additionalFields": {
+          "values": "={{ $json.approval_token }}, {{ $json.workflow_id }}, {{ $json.approver_id }}, {{ $json.step_number }}, 'pending', {{ $json.expiry_date }}"
+        },
+        "returnFields": "*"
+      },
+      "name": "Save Next Level Token",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [2660, 300]
+    },
+    {
+      "parameters": {
+        "to": "={{ $json.approver_email }}",
+        "subject": "📋 Contract Approval Required - {{ $json.level_name }}: {{ $node['Get Contract Details'].json.contract_number }}",
+        "html": "<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\"><h2 style=\"color: #333;\">Contract Approval Request - {{ $json.level_name }}</h2><p>Dear {{ $json.approver_name }},</p><p>A contract requires your approval at {{ $json.level_name }}:</p><table style=\"width: 100%; border-collapse: collapse; margin: 20px 0;\"><tr><td style=\"padding: 8px; border-bottom: 1px solid #ddd;\"><strong>Contract Number:</strong></td><td style=\"padding: 8px; border-bottom: 1px solid #ddd;\">{{ $node['Get Contract Details'].json.contract_number }}</td></tr><tr><td style=\"padding: 8px; border-bottom: 1px solid #ddd;\"><strong>Level:</strong></td><td style=\"padding: 8px; border-bottom: 1px solid #ddd;\">{{ $json.level_name }} (Level {{ $json.level_number }})</td></tr></table><p style=\"margin: 20px 0;\"><strong>Please review and take action:</strong></p><p style=\"margin: 20px 0;\"><a href=\"http://localhost:5678/webhook/contract-approval-decision?token={{ $json.approval_token }}&decision=approved\" style=\"background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin-right: 10px; display: inline-block;\">✅ Approve</a><a href=\"http://localhost:5678/webhook/contract-approval-decision?token={{ $json.approval_token }}&decision=rejected\" style=\"background-color: #f44336; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;\">❌ Reject</a></p><p style=\"color: #666; font-size: 12px; margin-top: 20px;\">This approval link will expire in {{ $json.timeout_hours }} hours.</p></div>"
+      },
+      "name": "Send Next Level Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [2880, 300],
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "responseBody": "={{ { \"success\": true, \"message\": \"Approved and moved to next level\", \"current_level\": $json.level_number, \"level_name\": $json.level_name, \"decision\": $query.decision } }}"
+      },
+      "name": "Respond Level Progressed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [3100, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "translation_contracts",
+        "updateKey": "id",
+        "columns": "status",
+        "additionalFields": {
+          "values": "approved"
+        }
+      },
+      "name": "Final Approval - Update Contract",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1780, 600]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "approval_workflows",
+        "updateKey": "id",
+        "columns": "status, completed_at",
+        "additionalFields": {
+          "values": "approved, {{ new Date().toISOString() }}"
+        }
+      },
+      "name": "Final Approval - Update Workflow",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [2000, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "responseBody": "={{ { \"success\": true, \"message\": \"Contract fully approved - all levels completed\", \"decision\": $query.decision } }}"
+      },
+      "name": "Respond Final Approved",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2220, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "responseBody": "={{ { \"success\": true, \"message\": \"Contract approved successfully\", \"decision\": $query.decision } }}"
+      },
+      "name": "Respond Approved",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "translation_contracts",
+        "updateKey": "id",
+        "columns": "status",
+        "additionalFields": {
+          "values": "rejected"
+        }
+      },
+      "name": "Update Contract Rejected",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1340, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "responseBody": "={{ { \"success\": true, \"message\": \"Contract rejected\", \"decision\": $query.decision } }}"
+      },
+      "name": "Respond Rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "responseBody": "={{ { \"success\": false, \"message\": \"Invalid or expired token\" } }}"
+      },
+      "name": "Respond Invalid Token",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 700]
+    }
+  ],
+  "connections": {
+    "Contract Submitted": {
+      "main": [
+        [
+          {
+            "node": "Validate Contract ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Contract ID": {
+      "main": [
+        [
+          {
+            "node": "Get Contract Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Contract Details": {
+      "main": [
+        [
+          {
+            "node": "Contract Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contract Found?": {
+      "main": [
+        [
+          {
+            "node": "Get Workflow Levels",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Contract Not Found Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contract Not Found Error": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Workflow Levels": {
+      "main": [
+        [
+          {
+            "node": "Format Approval Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Approval Data": {
+      "main": [
+        [
+          {
+            "node": "Create Approval Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Approval Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get Current Level Approver",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Level Approver": {
+      "main": [
+        [
+          {
+            "node": "Approver Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approver Found?": {
+      "main": [
+        [
+          {
+            "node": "Generate Approval Token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Approver Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Approver Error": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Approval Token": {
+      "main": [
+        [
+          {
+            "node": "Save Approval Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Approval Token": {
+      "main": [
+        [
+          {
+            "node": "Send Approval Email Level 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Approval Email Level 1": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation to Creator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Confirmation to Creator": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Decision Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Token": {
+      "main": [
+        [
+          {
+            "node": "Token Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token Valid?": {
+      "main": [
+        [
+          {
+            "node": "Update Token Decision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Token Decision": {
+      "main": [
+        [
+          {
+            "node": "Decision Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision Approved?": {
+      "main": [
+        [
+          {
+            "node": "Get Workflow and Next Level",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Contract Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Workflow and Next Level": {
+      "main": [
+        [
+          {
+            "node": "Has Next Level?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Next Level?": {
+      "main": [
+        [
+          {
+            "node": "Format Next Level Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Approval - Update Contract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Next Level Data": {
+      "main": [
+        [
+          {
+            "node": "Update Workflow Step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Workflow Step": {
+      "main": [
+        [
+          {
+            "node": "Get Next Level Approver",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Next Level Approver": {
+      "main": [
+        [
+          {
+            "node": "Generate Next Level Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Next Level Token": {
+      "main": [
+        [
+          {
+            "node": "Save Next Level Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Next Level Token": {
+      "main": [
+        [
+          {
+            "node": "Send Next Level Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Next Level Email": {
+      "main": [
+        [
+          {
+            "node": "Respond Level Progressed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Approval - Update Contract": {
+      "main": [
+        [
+          {
+            "node": "Final Approval - Update Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Approval - Update Workflow": {
+      "main": [
+        [
+          {
+            "node": "Respond Final Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Contract Rejected": {
+      "main": [
+        [
+          {
+            "node": "Respond Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "versionId": "1"
+}

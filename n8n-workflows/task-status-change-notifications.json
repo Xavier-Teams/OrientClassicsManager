@@ -1,0 +1,209 @@
+{
+  "name": "Task Status Change Notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "task-status-changed",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Task Status Changed Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "task-status-changed"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate and extract task data from webhook\nconst input = $input.all()[0].json;\nconst taskId = input.task_id || input.body?.task_id || input.query?.task_id || null;\nconst oldStatus = input.old_status || input.body?.old_status || null;\nconst newStatus = input.new_status || input.body?.new_status || input.status || null;\n\nif (!taskId || !newStatus) {\n  throw new Error('task_id and new_status are required. Received: ' + JSON.stringify(input));\n}\n\nreturn {\n  json: {\n    task_id: String(taskId).trim(),\n    old_status: oldStatus,\n    new_status: newStatus,\n    execution_id: $execution.id || `exec_${Date.now()}`,\n    workflow_name: 'Task Status Change Notifications'\n  }\n};"
+      },
+      "name": "Validate Task Status Change",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT \n  t.id,\n  t.title,\n  t.description,\n  t.status,\n  t.priority,\n  t.work_group,\n  t.due_date,\n  t.start_date,\n  t.completed_date,\n  u.id as assignee_id,\n  u.email as assignee_email,\n  u.full_name as assignee_name,\n  u.username as assignee_username,\n  creator.id as creator_id,\n  creator.email as creator_email,\n  creator.full_name as creator_name,\n  supervisor.id as supervisor_id,\n  supervisor.email as supervisor_email,\n  supervisor.full_name as supervisor_name\nFROM work_tasks t\nLEFT JOIN work_tasks_assigned_to wta ON t.id = wta.worktask_id\nLEFT JOIN users u ON wta.user_id = u.id\nLEFT JOIN users creator ON t.created_by_id = creator.id\nLEFT JOIN users supervisor ON t.supervisor_id = supervisor.id\nWHERE t.id = CAST('{{ $json.task_id }}' AS BIGINT)\nLIMIT 1",
+        "additionalFields": {}
+      },
+      "name": "Get Task Details",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format notifications based on status change\nconst task = $node['Get Task Details'].json || {};\nconst statusChange = $node['Validate Task Status Change'].json || {};\n\nconst statusLabels = {\n  'chua_bat_dau': 'Chưa bắt đầu',\n  'dang_tien_hanh': 'Đang tiến hành',\n  'hoan_thanh': 'Hoàn thành',\n  'khong_hoan_thanh': 'Không hoàn thành',\n  'cham_tien_do': 'Chậm tiến độ',\n  'hoan_thanh_truoc_han': 'Hoàn thành trước hạn',\n  'da_huy': 'Đã hủy',\n  'tam_hoan': 'Tạm hoãn'\n};\n\nconst statusColors = {\n  'hoan_thanh': '#4CAF50',\n  'hoan_thanh_truoc_han': '#4CAF50',\n  'khong_hoan_thanh': '#f44336',\n  'cham_tien_do': '#FF6B6B',\n  'da_huy': '#9E9E9E',\n  'tam_hoan': '#FFA500',\n  'dang_tien_hanh': '#2196F3',\n  'chua_bat_dau': '#9E9E9E'\n};\n\nconst newStatusLabel = statusLabels[statusChange.new_status] || statusChange.new_status;\nconst oldStatusLabel = statusLabels[statusChange.old_status] || statusChange.old_status || 'Unknown';\nconst statusColor = statusColors[statusChange.new_status] || '#4ECDC4';\n\n// Determine channel based on work_group\nconst workGroupChannels = {\n  'bien_tap': '#tasks-bien-tap',\n  'hanh_chinh': '#tasks-hanh-chinh',\n  'chung': '#tasks-general',\n  'default': '#tasks-general'\n};\n\nconst channel = workGroupChannels[task.work_group] || workGroupChannels['default'];\n\n// Format Mattermost message\nconst mattermostText = `📋 **Task Status Changed**\\n\\nTask **${task.title || 'Untitled'}** status has been updated.`;\n\nconst mattermostAttachments = [{\n  color: statusColor,\n  title: `Task: ${task.title || 'Untitled'}`,\n  fields: [\n    { short: true, title: 'Status', value: `${oldStatusLabel} → ${newStatusLabel}` },\n    { short: true, title: 'Assignee', value: `@${task.assignee_username || 'unassigned'}` },\n    { short: true, title: 'Priority', value: task.priority || 'normal' },\n    { short: true, title: 'Due Date', value: task.due_date || 'N/A' }\n  ],\n  footer: 'OrientClassicsManager',\n  ts: Math.floor(Date.now() / 1000)\n}];\n\n// Format email\nconst emailHtml = `\n<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;\">\n  <h2 style=\"color: #333; border-bottom: 2px solid ${statusColor}; padding-bottom: 10px;\">📋 Task Status Changed</h2>\n  \n  <p>The task <strong>${task.title || 'Untitled'}</strong> status has been updated:</p>\n  \n  <table style=\"width: 100%; border-collapse: collapse; margin: 20px 0; background: #f9f9f9;\">\n    <tr>\n      <td style=\"padding: 12px; border-bottom: 1px solid #ddd; font-weight: bold;\">Previous Status:</td>\n      <td style=\"padding: 12px; border-bottom: 1px solid #ddd;\">${oldStatusLabel}</td>\n    </tr>\n    <tr>\n      <td style=\"padding: 12px; border-bottom: 1px solid #ddd; font-weight: bold;\">New Status:</td>\n      <td style=\"padding: 12px; border-bottom: 1px solid #ddd; color: ${statusColor};\"><strong>${newStatusLabel}</strong></td>\n    </tr>\n    <tr>\n      <td style=\"padding: 12px; border-bottom: 1px solid #ddd; font-weight: bold;\">Assignee:</td>\n      <td style=\"padding: 12px; border-bottom: 1px solid #ddd;\">${task.assignee_name || 'Unassigned'}</td>\n    </tr>\n    <tr>\n      <td style=\"padding: 12px; font-weight: bold;\">Due Date:</td>\n      <td style=\"padding: 12px;\">${task.due_date || 'N/A'}</td>\n    </tr>\n  </table>\n  \n  <p style=\"margin-top: 30px;\">Best regards,<br><strong>OrientClassicsManager System</strong></p>\n</div>\n`;\n\n// Determine recipients\nconst recipients = [];\nif (task.assignee_email) recipients.push({ email: task.assignee_email, name: task.assignee_name, role: 'assignee' });\nif (task.creator_email && task.creator_email !== task.assignee_email) recipients.push({ email: task.creator_email, name: task.creator_name, role: 'creator' });\nif (task.supervisor_email && task.supervisor_email !== task.assignee_email && task.supervisor_email !== task.creator_email) recipients.push({ email: task.supervisor_email, name: task.supervisor_name, role: 'supervisor' });\n\nreturn {\n  json: {\n    // Task data\n    task_id: task.id,\n    task_title: task.title,\n    old_status: statusChange.old_status,\n    new_status: statusChange.new_status,\n    old_status_label: oldStatusLabel,\n    new_status_label: newStatusLabel,\n    status_color: statusColor,\n    // Mattermost data\n    mattermost_channel: channel,\n    mattermost_text: mattermostText,\n    mattermost_attachments: mattermostAttachments,\n    // Email data\n    email_html: emailHtml,\n    email_subject: `📋 Task Status Changed: ${task.title || 'Untitled'} - ${newStatusLabel}`,\n    recipients: recipients,\n    // Execution tracking\n    execution_id: statusChange.execution_id,\n    workflow_name: statusChange.workflow_name\n  }\n};"
+      },
+      "name": "Format Notifications",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "postMessage",
+        "channel": "={{ $json.mattermost_channel }}",
+        "text": "={{ $json.mattermost_text }}",
+        "attachments": "={{ $json.mattermost_attachments }}"
+      },
+      "name": "Send Mattermost Notification",
+      "type": "n8n-nodes-base.mattermost",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "mattermostApi": {
+          "id": "1",
+          "name": "Mattermost Connection"
+        }
+      },
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format email for each recipient\nconst recipient = $json;\nconst notificationData = $node['Format Notifications'].json || {};\n\nreturn {\n  json: {\n    to: recipient.email,\n    subject: notificationData.email_subject,\n    html: notificationData.email_html,\n    recipient_name: recipient.name,\n    recipient_role: recipient.role\n  }\n};"
+      },
+      "name": "Format Recipient Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "to": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}"
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [1340, 500],
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT log_workflow_execution('{{ $node[\"Format Notifications\"].json.workflow_name }}', '{{ $node[\"Format Notifications\"].json.execution_id }}', 'Send Status Change Notifications', 'notification', 'success', '{{ JSON.stringify({task_id: $node[\"Format Notifications\"].json.task_id, status_change: $node[\"Format Notifications\"].json.old_status + \" -> \" + $node[\"Format Notifications\"].json.new_status}) }}'::jsonb, NULL, NULL, NULL, NULL) as log_id",
+        "additionalFields": {}
+      },
+      "name": "Log Execution",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"message\": \"Task status change notifications sent\", \"task_id\": $node[\"Format Notifications\"].json.task_id, \"status\": $node[\"Format Notifications\"].json.new_status, \"notifications_sent\": { \"mattermost\": true, \"email\": $node[\"Format Notifications\"].json.recipients.length } } }}"
+      },
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 400]
+    }
+  ],
+  "connections": {
+    "Task Status Changed Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Task Status Change",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Task Status Change": {
+      "main": [
+        [
+          {
+            "node": "Get Task Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Task Details": {
+      "main": [
+        [
+          {
+            "node": "Format Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Notifications": {
+      "main": [
+        [
+          {
+            "node": "Send Mattermost Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Recipient Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Recipient Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Mattermost Notification": {
+      "main": [
+        [
+          {
+            "node": "Log Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Notification": {
+      "main": [
+        [
+          {
+            "node": "Log Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Execution": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1"
+}
+

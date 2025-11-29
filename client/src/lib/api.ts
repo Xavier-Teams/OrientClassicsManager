@@ -1698,7 +1698,10 @@ export interface Contract {
   final_payment: number;
   status: string;
   stage?: number; // Giai đoạn (1-5)
-  translation_part?: string; // Hợp phần
+  translation_part?: number | string; // Hợp phần (ID from backend, but may be code in some cases)
+  translation_part_id?: number; // Hợp phần ID (read-only)
+  translation_part_code?: string; // Hợp phần code (read-only)
+  translation_part_name?: string; // Hợp phần name (read-only)
   contract_file?: string;
   signed_at?: string;
   created_at: string;

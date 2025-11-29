@@ -507,6 +507,25 @@ export function ContractForm({
             : advanceIncludeOverview,
         final_payment: safeNumber(contract.final_payment) || finalPayment,
         status: contract.status || "draft",
+        stage: contract.stage ? parseInt(contract.stage.toString()) : undefined,
+        translation_part: (() => {
+          // Prefer translation_part_code if available (from backend serializer)
+          if (contract.translation_part_code) {
+            return contract.translation_part_code;
+          }
+          // If translation_part is a number (ID), find the code from translationParts
+          if (typeof contract.translation_part === 'number' && translationParts.length > 0) {
+            const part = translationParts.find(p => p.id === contract.translation_part);
+            if (part) {
+              return part.code;
+            }
+          }
+          // If translation_part is already a string (code), use it
+          if (typeof contract.translation_part === 'string') {
+            return contract.translation_part;
+          }
+          return undefined;
+        })(),
         signed_at: contract.signed_at || "",
         contract_file: contract.contract_file || undefined,
         translator_full_name: contract.translator_details?.full_name || "",
@@ -830,6 +849,23 @@ export function ContractForm({
       }
     }
 
+    // Convert translation_part from code (string) to ID (number) if needed
+    let translationPartId: number | undefined = undefined;
+    if (data.translation_part) {
+      // Check if it's already a number (ID)
+      if (typeof data.translation_part === "number") {
+        translationPartId = data.translation_part;
+      } else {
+        // It's a code (string), find the ID
+        const part = translationParts.find(
+          (p) => p.code === data.translation_part
+        );
+        if (part) {
+          translationPartId = part.id;
+        }
+      }
+    }
+
     await onSubmit({
       ...data,
       total_amount: data.total_amount,
@@ -839,7 +875,7 @@ export function ContractForm({
       contract_file: contractFile,
       template_id: selectedTemplateId || undefined,
       stage: data.stage || undefined,
-      translation_part: data.translation_part || undefined,
+      translation_part: translationPartId,
     });
   };
 

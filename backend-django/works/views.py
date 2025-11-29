@@ -278,7 +278,7 @@ class WorkTaskViewSet(viewsets.ModelViewSet):
         # Filter by assigned_to
         assigned_to = self.request.query_params.get('assigned_to', None)
         if assigned_to:
-            queryset = queryset.filter(assigned_to_id=assigned_to)
+            queryset = queryset.filter(assigned_to=assigned_to)
         
         # Filter by frequency
         frequency = self.request.query_params.get('frequency', None)

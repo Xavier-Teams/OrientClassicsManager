@@ -1,0 +1,96 @@
+{
+  "name": "Mattermost Test Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mattermost-test",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "mattermost-test"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format test message\nconst input = $input.all()[0].json;\n\nreturn {\n  json: {\n    text: `🧪 **Test Message from N8N**\\n\\nThis is a test message to verify Mattermost integration.\\n\\n**Timestamp:** ${new Date().toLocaleString('vi-VN')}\\n**Source:** OrientClassicsManager N8N`,\n    channel: input.channel || \"#tasks-general\",\n    attachments: [\n      {\n        color: \"#4ECDC4\",\n        title: \"Integration Test\",\n        text: \"Mattermost integration is working correctly!\",\n        fields: [\n          {\n            short: true,\n            title: \"Status\",\n            value: \"✅ Success\"\n          },\n          {\n            short: true,\n            title: \"Time\",\n            value: new Date().toLocaleString('vi-VN')\n          }\n        ],\n        footer: \"OrientClassicsManager\",\n        ts: Math.floor(Date.now() / 1000)\n      }\n    ]\n  }\n};"
+      },
+      "name": "Format Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "postMessage",
+        "channel": "={{ $json.channel }}",
+        "text": "={{ $json.text }}",
+        "attachments": "={{ $json.attachments }}"
+      },
+      "name": "Send to Mattermost",
+      "type": "n8n-nodes-base.mattermost",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "mattermostApi": {
+          "id": "1",
+          "name": "Mattermost Connection"
+        }
+      },
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"message\": \"Test message sent to Mattermost\", \"channel\": $json.channel, \"timestamp\": new Date().toISOString() } }}"
+      },
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Message": {
+      "main": [
+        [
+          {
+            "node": "Send to Mattermost",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Mattermost": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1"
+}
+
