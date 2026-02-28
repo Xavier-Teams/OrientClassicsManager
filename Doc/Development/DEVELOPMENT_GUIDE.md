@@ -19,7 +19,7 @@ Xây dựng một **phần mềm quản lý Dự án và quản lý tài liệu 
 
 ### Kiến trúc
 
-- **Backend**: Django 4.2+ REST Framework + Express.js (Node.js)
+- **Backend**: Express.js (Node.js) + Drizzle ORM
 - **Frontend**: React 18+ với TypeScript
 - **Database**: PostgreSQL
 - **AI**: OpenAI API integration
@@ -39,7 +39,7 @@ Xây dựng một **phần mềm quản lý Dự án và quản lý tài liệu 
 ### 1. Độc lập hoàn toàn
 
 - ✅ Không có dependency vào Odoo
-- ✅ Tự xây dựng từ đầu với Django/React
+- ✅ Tự xây dựng từ đầu với Express/React
 - ✅ Database schema tự thiết kế
 
 ### 2. Code Quality
@@ -63,34 +63,23 @@ Xây dựng một **phần mềm quản lý Dự án và quản lý tài liệu 
 
 ```
 OrientClassicsManager/
-├── backend-django/          # Django backend
-│   ├── config/             # Django settings
-│   ├── users/              # User management
-│   ├── works/              # Works & Parts
-│   ├── contracts/          # Contracts
-│   ├── reviews/            # Reviews
-│   ├── editing/            # Editing tasks
-│   ├── administration/    # Admin tasks
-│   ├── documents/          # Document management
-│   └── ai/                 # AI services
-│
 ├── server/                 # Express backend
 │   ├── ai/                 # AI services
 │   ├── routes.ts           # API routes
-│   ├── db.ts              # Database connection
-│   └── storage.ts         # Data access
+│   ├── db.ts               # Database connection (pg pool)
+│   └── storage.ts          # Data access
 │
-├── client/                 # React frontend
+├── client/                 # React frontend (Vite)
 │   ├── src/
-│   │   ├── components/    # UI components
-│   │   ├── pages/         # Page components
-│   │   └── lib/           # Utilities
+│   │   ├── components/     # UI components
+│   │   ├── pages/          # Page components
+│   │   └── lib/            # Utilities
 │   └── ...
 │
 ├── shared/                 # Shared code
-│   └── schema.ts         # Database schema
+│   └── schema.ts           # Drizzle schema
 │
-└── Doc/                   # Documentation
+└── Doc/                    # Documentation
 ```
 
 ---
@@ -106,7 +95,7 @@ progress_checked → final_translation → expert_reviewed →
 project_accepted → completed
 ```
 
-**Implementation:** Django FSM (không dùng Odoo workflow engine)
+**Implementation:** Express + Drizzle, lưu trạng thái qua bảng workflow/status
 
 ### Document Routing Workflow
 
@@ -114,7 +103,7 @@ project_accepted → completed
 sent → received → processed → approved/rejected
 ```
 
-**Implementation:** Django models và custom logic
+**Implementation:** Express middleware/services và logic nghiệp vụ
 
 ---
 
@@ -122,16 +111,16 @@ sent → received → processed → approved/rejected
 
 ### 1. Feature Development
 
-1. **Phân tích yêu cầu** - Hiểu nghiệp vụ từ HRMS (nếu có)
-2. **Thiết kế database** - Tự thiết kế schema phù hợp
-3. **Implement Backend** - Django models và APIs
-4. **Implement Frontend** - React components
-5. **Test** - Unit tests và integration tests
-6. **Documentation** - Update docs
+1. **Phân tích yêu cầu** - Hiểu nghiệp vụ/tính năng
+2. **Thiết kế database** - Cập nhật Drizzle schema
+3. **Implement Backend** - Express routes/services
+4. **Implement Frontend** - React components/pages
+5. **Test** - Unit/integration tests
+6. **Documentation** - Cập nhật docs
 
 ### 2. Code Standards
 
-- **Backend**: PEP 8 (Python), ESLint (TypeScript)
+- **Backend**: ESLint + Prettier (TypeScript)
 - **Frontend**: ESLint + Prettier
 - **Commits**: Conventional Commits
 - **Branching**: Git Flow
@@ -139,11 +128,7 @@ sent → received → processed → approved/rejected
 ### 3. Testing
 
 ```bash
-# Django tests
-cd backend-django
-python manage.py test
-
-# Express tests (when implemented)
+# Server tests (when implemented)
 npm test
 
 # Frontend tests (when implemented)
@@ -154,22 +139,11 @@ npm run test
 
 ## API Development
 
-### Django REST Framework
+### Best Practices (Express)
 
-```python
-# Example: Works API
-class TranslationWorkViewSet(viewsets.ModelViewSet):
-    queryset = TranslationWork.objects.filter(active=True)
-    serializer_class = TranslationWorkSerializer
-    permission_classes = [IsAuthenticated]
-    
-    @action(detail=True, methods=['post'])
-    def approve(self, request, pk=None):
-        work = self.get_object()
-        work.approve()
-        work.save()
-        return Response({'status': 'approved'})
-```
+- Tách routes → controllers/services → data access (storage)
+- Xác thực và phân quyền qua middleware
+- Dùng Drizzle để truy cập DB, tránh raw SQL nếu không cần
 
 ### Express.js APIs
 
@@ -219,10 +193,9 @@ export const WorkCard = ({ work }: { work: Work }) => {
 
 ### Schema Changes
 
-1. **Update schema** (`shared/schema.ts` cho Express)
-2. **Create migrations** (`python manage.py makemigrations` cho Django)
-3. **Apply migrations** (`npm run db:push` hoặc `python manage.py migrate`)
-4. **Update seed script** (nếu cần)
+1. **Update schema** (`shared/schema.ts`)
+2. **Apply migrations** (`npm run db:push`)
+3. **Seed data** (nếu cần) (`npm run db:seed`)
 
 ### Best Practices
 

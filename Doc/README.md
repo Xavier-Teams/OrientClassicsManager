@@ -15,101 +15,74 @@ OrientClassicsManager là hệ thống quản lý dự án dịch thuật đư�
 
 ## 📋 Cấu trúc tài liệu
 
-### 🚀 [Setup](Setup/)
+### 🚀 Setup
 
-Hướng dẫn cài đặt và triển khai hệ thống
+- Hướng dẫn cài đặt và triển khai hệ thống cho Developer
 
-- **[COMPLETE_SETUP_GUIDE.md](Setup/COMPLETE_SETUP_GUIDE.md)** - Hướng dẫn cài đặt hoàn chỉnh
-- **[QUICK_START.md](Setup/QUICK_START.md)** - Khởi động nhanh
-- **[SETUP_GUIDE.md](Setup/SETUP_GUIDE.md)** - Hướng dẫn setup chi tiết
-- **[FASTAPI_SETUP.md](Setup/FASTAPI_SETUP.md)** - Setup FastAPI (legacy)
+- [COMPLETE_SETUP_GUIDE.md](Setup/COMPLETE_SETUP_GUIDE.md) — Cài đặt hoàn chỉnh
+- [QUICK_START.md](Setup/QUICK_START.md) — Khởi động nhanh
+- [SETUP_GUIDE.md](Setup/SETUP_GUIDE.md) — Setup chi tiết
 
-### 🗄️ [Database](Database/)
+### 🗄️ Database
 
-Tài liệu về database và quản lý dữ liệu
+- Tài liệu PostgreSQL, schema, backup/restore
 
-- **[DATABASE_COMPLETE_GUIDE.md](Database/DATABASE_COMPLETE_GUIDE.md)** - Hướng dẫn database toàn diện
-- **[DATABASE_DOCUMENTATION.md](Database/DATABASE_DOCUMENTATION.md)** - Tài liệu schema
-- **[QUICK_START_DATABASE.md](Database/QUICK_START_DATABASE.md)** - Khởi tạo database nhanh
-- **[PGADMIN4_SETUP_GUIDE.md](Database/PGADMIN4_SETUP_GUIDE.md)** - Cài đặt pgAdmin4
-- **SQL Files**: Schema và seed data
+- [DATABASE_COMPLETE_GUIDE.md](Database/DATABASE_COMPLETE_GUIDE.md) — Hướng dẫn database toàn diện
+- [DATABASE_DOCUMENTATION.md](Database/DATABASE_DOCUMENTATION.md) — Tài liệu schema
+- [QUICK_START_DATABASE.md](Database/QUICK_START_DATABASE.md) — Khởi tạo database nhanh
+- [PGADMIN4_SETUP_GUIDE.md](Database/PGADMIN4_SETUP_GUIDE.md) — Cài đặt pgAdmin4
 
-### 🌐 [API](API/)
+### 🌐 API
 
-Tài liệu API và integration
+- Tài liệu API và tích hợp
 
-- **[API_COMPLETE_GUIDE.md](API/API_COMPLETE_GUIDE.md)** - Hướng dẫn API toàn diện
-- **[API_DOCUMENTATION.md](API/API_DOCUMENTATION.md)** - Chi tiết API endpoints
-- **[API_CONNECTION_GUIDE.md](API/API_CONNECTION_GUIDE.md)** - Hướng dẫn kết nối API
-- **[TEST_API.md](API/TEST_API.md)** - Testing API
+- [API_COMPLETE_GUIDE.md](API/API_COMPLETE_GUIDE.md) — Hướng dẫn API toàn diện
+- [API_DOCUMENTATION.md](API/API_DOCUMENTATION.md) — Chi tiết endpoints
+- [API_CONNECTION_GUIDE.md](API/API_CONNECTION_GUIDE.md) — Hướng dẫn kết nối
 
-### 🔧 [Development](Development/)
+### 🔧 Development
 
-Hướng dẫn phát triển và debugging
+- Quy trình phát triển, debug, kết nối FE/BE
 
-- **[DEVELOPMENT_GUIDE.md](Development/DEVELOPMENT_GUIDE.md)** - Hướng dẫn phát triển
-- **[DJANGO_SERVER_LOGS_EXPLAINED.md](Development/DJANGO_SERVER_LOGS_EXPLAINED.md)** - Giải thích logs
-- **[FE_BE_CONNECTION_SUMMARY.md](Development/FE_BE_CONNECTION_SUMMARY.md)** - Kết nối Frontend-Backend
+- [DEVELOPMENT_GUIDE.md](Development/DEVELOPMENT_GUIDE.md) — Hướng dẫn phát triển
+- [FE_BE_CONNECTION_SUMMARY.md](Development/FE_BE_CONNECTION_SUMMARY.md) — Kết nối Frontend-Backend
 
-### 🏗️ [Architecture](Architecture/)
+### 🏗️ Architecture
 
-Kiến trúc hệ thống và thiết kế
+- Kiến trúc hệ thống và quyết định thiết kế
 
-- **[SYSTEM_ARCHITECTURE.md](Architecture/SYSTEM_ARCHITECTURE.md)** - Tổng quan kiến trúc hệ thống
-- **[ARCHITECTURE_DECISION.md](Architecture/ARCHITECTURE_DECISION.md)** - Quyết định kiến trúc
-- **[PAYMENT_ARCHITECTURE.md](Architecture/PAYMENT_ARCHITECTURE.md)** - Kiến trúc thanh toán
+- [SYSTEM_ARCHITECTURE.md](Architecture/SYSTEM_ARCHITECTURE.md) — Tổng quan kiến trúc
+- [ARCHITECTURE_DECISION.md](Architecture/ARCHITECTURE_DECISION.md) — Quyết định kiến trúc
+- [PAYMENT_ARCHITECTURE.md](Architecture/PAYMENT_ARCHITECTURE.md) — Kiến trúc thanh toán
 
-### 📋 [BA](BA/)
+### � Integrations
 
-Tài liệu phân tích nghiệp vụ
+- Tài liệu tích hợp hệ thống bên ngoài (tùy chọn)
 
-- **[BA_PM_Quan_ly_Du_an_dich_thuat.md](BA/BA_PM_Quan_ly_Du_an_dich_thuat.md)** - Phân tích dự án
-- **[KE_HOACH_TRIEN_KHAI_CHI_TIET.md](BA/KE_HOACH_TRIEN_KHAI_CHI_TIET.md)** - Kế hoạch triển khai
-- **[Quy_trinh_quan_ly_hop_phan_dich_thuat.md](BA/Quy_trinh_quan_ly_hop_phan_dich_thuat.md)** - Quy trình quản lý
-- **[TOM_TAT_KE_HOACH.md](BA/TOM_TAT_KE_HOACH.md)** - Tóm tắt kế hoạch
+- [MATTERMOST_INTEGRATION.md](Integration/MATTERMOST_INTEGRATION.md) — Tích hợp Mattermost
+- [MATTERMOST_QUICK_START.md](Integration/MATTERMOST_QUICK_START.md) — Quick start Mattermost
 
-### 🤖 [N8N](N8N/)
+### 🤖 N8N (tùy chọn)
 
-Hệ thống tự động hóa và Multi-Level Approval Workflow
+- Hệ thống tự động hóa và Multi-Level Approval
 
-- **[README.md](N8N/README.md)** ⭐ - Tổng quan N8N documentation
-- **[COMPLETE_SETUP_GUIDE.md](N8N/COMPLETE_SETUP_GUIDE.md)** - Hướng dẫn setup hoàn chỉnh
-- **[WORKFLOW_SUGGESTIONS.md](N8N/WORKFLOW_SUGGESTIONS.md)** ⭐ NEW - Đề xuất workflows
-- **[QUICK_START_MULTILEVEL.md](N8N/QUICK_START_MULTILEVEL.md)** - Quick start multi-level approval
-- **[TESTING_GUIDE.md](N8N/TESTING_GUIDE.md)** - Hướng dẫn testing workflow
-- **[SETUP_APPROVAL_TABLES.md](N8N/SETUP_APPROVAL_TABLES.md)** - Database schema setup
-- **[IMPLEMENTATION_STATUS.md](N8N/IMPLEMENTATION_STATUS.md)** - Trạng thái triển khai
+- [README.md](N8N/README.md) — Tổng quan
+- [COMPLETE_SETUP_GUIDE.md](N8N/COMPLETE_SETUP_GUIDE.md) — Setup hoàn chỉnh
+- [SETUP_APPROVAL_TABLES.md](N8N/SETUP_APPROVAL_TABLES.md) — Schema setup
 
-### 🔄 [Automation](Automation/) ⭐ NEW
+### � Feature Guides
 
-Chiến lược và kế hoạch triển khai automation toàn diện
+- Hướng dẫn nghiệp vụ/tính năng cho Developer
 
-- **[README.md](Automation/README.md)** ⭐ - Tổng quan automation
-- **[COMPREHENSIVE_AUTOMATION_STRATEGY.md](Automation/COMPREHENSIVE_AUTOMATION_STRATEGY.md)** - Chiến lược toàn diện
-- **[IMPLEMENTATION_PLAN.md](Automation/IMPLEMENTATION_PLAN.md)** - Kế hoạch triển khai 10 tuần
+- [ASSIGNMENT_FEATURES.md](Manuals/ASSIGNMENT_FEATURES.md) — Tính năng giao việc
+- [EVALUATION_REDO_FEATURES.md](Manuals/EVALUATION_REDO_FEATURES.md) — Tính năng đánh giá
+- [VALIDATION_FIX.md](Manuals/VALIDATION_FIX.md) — Sửa lỗi validation
 
-### 💬 [Integration](Integration/) ⭐ NEW
+### 📝 Forms
 
-Tích hợp với các hệ thống bên ngoài
+- Mẫu biểu phục vụ phát triển/kiểm thử
 
-- **[MATTERMOST_INTEGRATION.md](Integration/MATTERMOST_INTEGRATION.md)** ⭐ - Hướng dẫn tích hợp Mattermost
-- **[MATTERMOST_QUICK_START.md](Integration/MATTERMOST_QUICK_START.md)** - Quick start Mattermost
-
-### 📝 [Forms](Forms/)
-
-Mẫu biểu và forms
-
-- **[hop_dong.md](Forms/hop_dong.md)** - Mẫu hợp đồng
-
-### 📖 [Manuals](Manuals/)
-
-Hướng dẫn sử dụng và tính năng
-
-- **[ASSIGNMENT_FEATURES.md](Manuals/ASSIGNMENT_FEATURES.md)** - Tính năng giao việc
-- **[EVALUATION_REDO_FEATURES.md](Manuals/EVALUATION_REDO_FEATURES.md)** - Tính năng đánh giá
-- **[HUONG_DAN_CAI_DAT_VA_TRIEN_KHAI.md](Manuals/HUONG_DAN_CAI_DAT_VA_TRIEN_KHAI.md)** - Hướng dẫn cài đặt
-- **[VALIDATION_FIX.md](Manuals/VALIDATION_FIX.md)** - Sửa lỗi validation
-- **DB Backup**: Hướng dẫn backup database
+- [hop_dong.md](Forms/hop_dong.md)
 
 ---
 
@@ -163,13 +136,9 @@ npm run db:push
 npm run db:seed
 ```
 
-### 3. Testing
+### 3. Testing nhanh
 
 ```bash
-# Run tests
-npm test
-
-# Check API endpoints
 curl http://localhost:5000/api/health
 ```
 
@@ -200,18 +169,9 @@ curl http://localhost:5000/api/health
 
 ## 🛠️ Maintenance
 
-### Database Backup
+### Database Backup/Restore
 
-```bash
-# Backup database
-scripts\backup_database_orient.bat
-
-# Restore database
-scripts\restore_database_orient.bat
-
-# Health check
-scripts\check_database_orient.bat
-```
+- Xem hướng dẫn trong [DATABASE_COMPLETE_GUIDE.md](Database/DATABASE_COMPLETE_GUIDE.md) — mục Backup & Restore.
 
 ### System Updates
 
@@ -236,7 +196,7 @@ pm2 restart all
 
 - Kiểm tra PostgreSQL service
 - Xác minh DATABASE_URL trong .env
-- Chạy health check script
+- Kiểm tra kết nối bằng psql/pgAdmin
 
 **Module Not Found**:
 
