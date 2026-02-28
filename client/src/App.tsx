@@ -31,6 +31,8 @@ import WorkTasks from "@/pages/work-tasks";
 import WorkTasksModern from "@/pages/work-tasks-modern";
 import AssignmentDemo from "@/pages/assignment-demo";
 import { canManageUsers, canManageTranslators, canAccessWorkReports } from "@/lib/permissions";
+import TasksBoard from "@/pages/tasks-board";
+import AdminMattermost from "@/pages/admin-mattermost";
 
 // Component to protect routes that require authentication
 function AuthenticatedRoute({ children }: { children: React.ReactNode }) {
@@ -103,6 +105,7 @@ function Router() {
                 </Route>
                 <Route path="/ai-assistant" component={AIAssistant} />
                 <Route path="/settings" component={Settings} />
+                <Route path="/admin/integrations/mattermost" component={AdminMattermost} />
                 <Route path="/work-reports">
                   {() => (
                     <ProtectedRoute requiredPermission={canAccessWorkReports} fallbackPath="/">
@@ -112,6 +115,7 @@ function Router() {
                 </Route>
                 <Route path="/work-reports/personal" component={WorkReportsPersonal} />
                 <Route path="/work-plan" component={WorkPlan} />
+                <Route path="/tasks/board" component={TasksBoard} />
                 <Route path="/work-tasks" component={WorkTasksModern} />
                 <Route path="/work-tasks-old" component={WorkTasks} />
                 <Route path="/assignment-demo" component={AssignmentDemo} />

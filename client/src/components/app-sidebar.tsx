@@ -94,6 +94,12 @@ const workManagementItems = [
     testId: "nav-work-tasks",
   },
   {
+    title: "Board công việc",
+    url: "/tasks/board",
+    icon: ListChecks,
+    testId: "nav-tasks-board",
+  },
+  {
     title: "Báo cáo công việc chung",
     url: "/work-reports",
     icon: BarChart3,
@@ -135,6 +141,12 @@ export function AppSidebar() {
             url: "/admin/users",
             icon: Shield,
             testId: "nav-admin-users",
+          },
+          {
+            title: "Mattermost",
+            url: "/admin/integrations/mattermost",
+            icon: Settings,
+            testId: "nav-admin-mattermost",
           },
         ]
       : []),

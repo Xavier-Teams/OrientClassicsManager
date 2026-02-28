@@ -59,6 +59,23 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
+  // Request to same-origin Node backend (bypass API_BASE_URL; suitable when FE served by BE)
+  private async requestLocal<T>(
+    endpoint: string,
+    options?: RequestInit,
+  ): Promise<T> {
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+      ...(options?.headers || {}),
+    };
+    const res = await fetch(endpoint, { ...options, headers });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || res.statusText);
+    }
+    return res.json();
+  }
+
   private getAuthToken(): string | null {
     // Try to get token from localStorage
     // Check multiple possible keys
@@ -76,7 +93,7 @@ class ApiClient {
         (key) =>
           key.toLowerCase().includes("token") ||
           key.toLowerCase().includes("access") ||
-          key.toLowerCase().includes("auth")
+          key.toLowerCase().includes("auth"),
       );
       console.warn("No auth token found in localStorage.", {
         searchedKeys: ["access_token", "token", "accessToken", "access"],
@@ -90,7 +107,7 @@ class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    options?: RequestInit & { suppress404Log?: boolean }
+    options?: RequestInit & { suppress404Log?: boolean },
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const token = this.getAuthToken();
@@ -197,7 +214,7 @@ class ApiClient {
           const errors = Object.entries(errorData)
             .map(
               ([key, value]) =>
-                `${key}: ${Array.isArray(value) ? value.join(", ") : value}`
+                `${key}: ${Array.isArray(value) ? value.join(", ") : value}`,
             )
             .join("; ");
           errorMessage = errors || errorMessage;
@@ -218,7 +235,7 @@ class ApiClient {
           console.error(
             `API Error [${response.status}]:`,
             endpoint,
-            errorMessage
+            errorMessage,
           );
         }
       }
@@ -249,7 +266,7 @@ class ApiClient {
     }
     const queryString = queryParams.toString();
     return this.request<WorkListResponse>(
-      `/api/v1/works/${queryString ? `?${queryString}` : ""}`
+      `/api/v1/works/${queryString ? `?${queryString}` : ""}`,
     );
   }
 
@@ -292,7 +309,7 @@ class ApiClient {
   // Authentication API
   async login(
     username: string,
-    password: string
+    password: string,
   ): Promise<{
     access: string;
     refresh: string;
@@ -473,7 +490,7 @@ class ApiClient {
       previous: string | null;
       results: Translator[];
     }>(
-      `/api/v1/translators/translators/${queryString ? `?${queryString}` : ""}`
+      `/api/v1/translators/translators/${queryString ? `?${queryString}` : ""}`,
     );
   }
 
@@ -506,7 +523,7 @@ class ApiClient {
 
   async updateTranslator(
     id: number | string,
-    translator: Partial<Translator>
+    translator: Partial<Translator>,
   ): Promise<Translator> {
     return this.request<Translator>(`/api/v1/translators/translators/${id}/`, {
       method: "PATCH",
@@ -525,7 +542,7 @@ class ApiClient {
       `/api/v1/translators/translators/${id}/activate/`,
       {
         method: "POST",
-      }
+      },
     );
   }
 
@@ -534,7 +551,7 @@ class ApiClient {
       `/api/v1/translators/translators/${id}/deactivate/`,
       {
         method: "POST",
-      }
+      },
     );
   }
 
@@ -586,7 +603,7 @@ class ApiClient {
 
   async assignTranslator(
     id: number | string,
-    translatorId: number
+    translatorId: number,
   ): Promise<Work> {
     return this.request<Work>(`/api/v1/works/${id}/assign_translator/`, {
       method: "POST",
@@ -636,7 +653,7 @@ class ApiClient {
 
   async getContractProgressReport(): Promise<ContractProgressReport> {
     return this.request<ContractProgressReport>(
-      "/api/v1/contracts/progress_report/"
+      "/api/v1/contracts/progress_report/",
     );
   }
 
@@ -743,7 +760,7 @@ class ApiClient {
 
   async updateContract(
     id: number | string,
-    contract: Partial<Contract> & { contract_file?: File }
+    contract: Partial<Contract> & { contract_file?: File },
   ): Promise<Contract> {
     const { contract_file, ...contractData } = contract;
 
@@ -778,6 +795,67 @@ class ApiClient {
     return this.request<void>(`/api/v1/contracts/${id}/`, {
       method: "DELETE",
     });
+  }
+
+  // ================================
+  // ClickUp-like Tasks - Same-origin
+  // ================================
+  async getTaskLists(): Promise<Array<{ id: string; name: string }>> {
+    return this.requestLocal<Array<{ id: string; name: string }>>(
+      `/api/task-lists`,
+    );
+  }
+
+  async getTasksBoard(params?: { listId?: string; assigneeId?: string; limit?: number }): Promise<{
+    columns: Record<
+      string,
+      { count: number; items: Array<Record<string, any>> }
+    >;
+  }> {
+    const qs = new URLSearchParams();
+    if (params?.listId) qs.set("listId", params.listId);
+    if (params?.assigneeId && params.assigneeId !== "__ALL__") qs.set("assigneeId", params.assigneeId);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const q = qs.toString();
+    return this.requestLocal(`/api/tasks.board${q ? `?${q}` : ""}`);
+  }
+
+  async moveTaskBoard(payload: {
+    taskId: string;
+    toStatus?: "pending" | "in_progress" | "completed" | "cancelled";
+    toListId?: string;
+    newParentId?: string | null;
+  }): Promise<any> {
+    return this.requestLocal(`/api/tasks/board-move`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async createTask(payload: {
+    name: string;
+    listId?: string;
+    status: "pending" | "in_progress" | "completed" | "cancelled";
+    priority?: "low" | "normal" | "high" | "urgent";
+    relatedWorkId?: string;
+  }): Promise<any> {
+    return this.requestLocal(`/api/tasks`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: {
+        "x-user-role": "thu_ky_hop_phan",
+      },
+    });
+  }
+
+  async getUsersLocal(): Promise<
+    Array<{ id: string; fullName: string; avatar?: string }>
+  > {
+    return this.requestLocal(`/api/users`);
+  }
+
+  async getTaskAssignees(taskId: string): Promise<Array<{ userId: string }>> {
+    return this.requestLocal(`/api/tasks/${taskId}/assignees`);
   }
 
   // Contract Templates API
@@ -860,7 +938,7 @@ class ApiClient {
       file?: File;
       translation_part?: string;
       is_default?: boolean;
-    }
+    },
   ): Promise<ContractTemplate> {
     const { file, ...templateData } = template;
 
@@ -879,7 +957,7 @@ class ApiClient {
         {
           method: "PATCH",
           body: formData,
-        }
+        },
       );
     }
 
@@ -900,7 +978,7 @@ class ApiClient {
     templateId: number | string,
     contractData: any, // ContractFormValues from ContractForm
     work?: Work,
-    translator?: Translator
+    translator?: Translator,
   ): Promise<Blob> {
     return this.request<Blob>(
       `/api/v1/contract-templates/${templateId}/generate/`,
@@ -912,7 +990,7 @@ class ApiClient {
           translator: translator,
         }),
         responseType: "blob",
-      }
+      },
     );
   }
 
@@ -962,7 +1040,7 @@ class ApiClient {
 
   async updateWorkTask(
     id: number | string,
-    task: Partial<WorkTask>
+    task: Partial<WorkTask>,
   ): Promise<WorkTask> {
     return this.request<WorkTask>(`/api/v1/works/tasks/${id}/`, {
       method: "PATCH",
@@ -977,7 +1055,10 @@ class ApiClient {
   }
 
   // Task Assignment API
-  async assignTask(id: number | string, data: TaskAssignmentData): Promise<{
+  async assignTask(
+    id: number | string,
+    data: TaskAssignmentData,
+  ): Promise<{
     status: string;
     message: string;
     task: WorkTask;
@@ -992,7 +1073,10 @@ class ApiClient {
     });
   }
 
-  async evaluateTask(id: number | string, data: TaskEvaluationData): Promise<{
+  async evaluateTask(
+    id: number | string,
+    data: TaskEvaluationData,
+  ): Promise<{
     status: string;
     message: string;
     task: WorkTask;
@@ -1031,7 +1115,9 @@ class ApiClient {
       next: string | null;
       previous: string | null;
       results: WorkTask[];
-    }>(`/api/v1/works/tasks/my_assigned_tasks/${queryString ? `?${queryString}` : ""}`);
+    }>(
+      `/api/v1/works/tasks/my_assigned_tasks/${queryString ? `?${queryString}` : ""}`,
+    );
   }
 
   async getMySupervisedTasks(params?: {
@@ -1058,7 +1144,9 @@ class ApiClient {
       next: string | null;
       previous: string | null;
       results: WorkTask[];
-    }>(`/api/v1/works/tasks/my_supervised_tasks/${queryString ? `?${queryString}` : ""}`);
+    }>(
+      `/api/v1/works/tasks/my_supervised_tasks/${queryString ? `?${queryString}` : ""}`,
+    );
   }
 
   // Custom Fields API
@@ -1069,11 +1157,12 @@ class ApiClient {
   }): Promise<{ results: CustomField[] }> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append("page", params.page.toString());
-    if (params?.page_size) queryParams.append("page_size", params.page_size.toString());
+    if (params?.page_size)
+      queryParams.append("page_size", params.page_size.toString());
     if (params?.search) queryParams.append("search", params.search);
     const queryString = queryParams.toString();
     return this.request<{ results: CustomField[] }>(
-      `/api/v1/works/custom-fields/${queryString ? `?${queryString}` : ""}`
+      `/api/v1/works/custom-fields/${queryString ? `?${queryString}` : ""}`,
     );
   }
 
@@ -1090,7 +1179,7 @@ class ApiClient {
 
   async updateCustomField(
     id: number | string,
-    field: Partial<CustomField>
+    field: Partial<CustomField>,
   ): Promise<CustomField> {
     return this.request<CustomField>(`/api/v1/works/custom-fields/${id}/`, {
       method: "PATCH",
@@ -1110,33 +1199,38 @@ class ApiClient {
     field_id?: number;
   }): Promise<{ results: CustomFieldValue[] }> {
     const queryParams = new URLSearchParams();
-    if (params?.task_id) queryParams.append("task_id", params.task_id.toString());
-    if (params?.field_id) queryParams.append("field_id", params.field_id.toString());
+    if (params?.task_id)
+      queryParams.append("task_id", params.task_id.toString());
+    if (params?.field_id)
+      queryParams.append("field_id", params.field_id.toString());
     const queryString = queryParams.toString();
     return this.request<{ results: CustomFieldValue[] }>(
-      `/api/v1/works/custom-field-values/${queryString ? `?${queryString}` : ""}`
+      `/api/v1/works/custom-field-values/${queryString ? `?${queryString}` : ""}`,
     );
   }
 
   async createCustomFieldValue(
-    value: Partial<CustomFieldValue>
+    value: Partial<CustomFieldValue>,
   ): Promise<CustomFieldValue> {
-    return this.request<CustomFieldValue>("/api/v1/works/custom-field-values/", {
-      method: "POST",
-      body: JSON.stringify(value),
-    });
+    return this.request<CustomFieldValue>(
+      "/api/v1/works/custom-field-values/",
+      {
+        method: "POST",
+        body: JSON.stringify(value),
+      },
+    );
   }
 
   async updateCustomFieldValue(
     id: number | string,
-    value: Partial<CustomFieldValue>
+    value: Partial<CustomFieldValue>,
   ): Promise<CustomFieldValue> {
     return this.request<CustomFieldValue>(
       `/api/v1/works/custom-field-values/${id}/`,
       {
         method: "PATCH",
         body: JSON.stringify(value),
-      }
+      },
     );
   }
 
@@ -1154,11 +1248,12 @@ class ApiClient {
   }): Promise<{ results: CustomGroup[] }> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append("page", params.page.toString());
-    if (params?.page_size) queryParams.append("page_size", params.page_size.toString());
+    if (params?.page_size)
+      queryParams.append("page_size", params.page_size.toString());
     if (params?.search) queryParams.append("search", params.search);
     const queryString = queryParams.toString();
     return this.request<{ results: CustomGroup[] }>(
-      `/api/v1/works/custom-groups/${queryString ? `?${queryString}` : ""}`
+      `/api/v1/works/custom-groups/${queryString ? `?${queryString}` : ""}`,
     );
   }
 
@@ -1175,7 +1270,7 @@ class ApiClient {
 
   async updateCustomGroup(
     id: number | string,
-    group: Partial<CustomGroup>
+    group: Partial<CustomGroup>,
   ): Promise<CustomGroup> {
     return this.request<CustomGroup>(`/api/v1/works/custom-groups/${id}/`, {
       method: "PATCH",
@@ -1189,16 +1284,26 @@ class ApiClient {
     });
   }
 
-  async getCustomGroupsBoardData(): Promise<Record<number, {
-    group: CustomGroup;
-    tasks: WorkTask[];
-    count: number;
-  }>> {
-    return this.request<Record<number, {
-      group: CustomGroup;
-      tasks: WorkTask[];
-      count: number;
-    }>>("/api/v1/works/custom-groups/board_data/");
+  async getCustomGroupsBoardData(): Promise<
+    Record<
+      number,
+      {
+        group: CustomGroup;
+        tasks: WorkTask[];
+        count: number;
+      }
+    >
+  > {
+    return this.request<
+      Record<
+        number,
+        {
+          group: CustomGroup;
+          tasks: WorkTask[];
+          count: number;
+        }
+      >
+    >("/api/v1/works/custom-groups/board_data/");
   }
 
   // View Preferences API
@@ -1207,20 +1312,23 @@ class ApiClient {
     view_type?: string;
   }): Promise<{ results: ViewPreference[] }> {
     const queryParams = new URLSearchParams();
-    if (params?.user_id) queryParams.append("user_id", params.user_id.toString());
+    if (params?.user_id)
+      queryParams.append("user_id", params.user_id.toString());
     if (params?.view_type) queryParams.append("view_type", params.view_type);
     const queryString = queryParams.toString();
     return this.request<{ results: ViewPreference[] }>(
-      `/api/v1/works/view-preferences/${queryString ? `?${queryString}` : ""}`
+      `/api/v1/works/view-preferences/${queryString ? `?${queryString}` : ""}`,
     );
   }
 
   async getViewPreference(id: number | string): Promise<ViewPreference> {
-    return this.request<ViewPreference>(`/api/v1/works/view-preferences/${id}/`);
+    return this.request<ViewPreference>(
+      `/api/v1/works/view-preferences/${id}/`,
+    );
   }
 
   async createViewPreference(
-    preference: Partial<ViewPreference>
+    preference: Partial<ViewPreference>,
   ): Promise<ViewPreference> {
     return this.request<ViewPreference>("/api/v1/works/view-preferences/", {
       method: "POST",
@@ -1230,14 +1338,14 @@ class ApiClient {
 
   async updateViewPreference(
     id: number | string,
-    preference: Partial<ViewPreference>
+    preference: Partial<ViewPreference>,
   ): Promise<ViewPreference> {
     return this.request<ViewPreference>(
       `/api/v1/works/view-preferences/${id}/`,
       {
         method: "PATCH",
         body: JSON.stringify(preference),
-      }
+      },
     );
   }
 
@@ -1256,7 +1364,7 @@ class ApiClient {
     if (params?.year) queryParams.append("year", params.year.toString());
     const queryString = queryParams.toString();
     return this.request<WorkTaskStatistics>(
-      `/api/v1/works/tasks/statistics/${queryString ? `?${queryString}` : ""}`
+      `/api/v1/works/tasks/statistics/${queryString ? `?${queryString}` : ""}`,
     );
   }
 
@@ -1265,7 +1373,7 @@ class ApiClient {
     params?: {
       month?: number;
       year?: number;
-    }
+    },
   ): Promise<PersonalWorkTaskStatistics> {
     const queryParams = new URLSearchParams();
     if (params?.month) queryParams.append("month", params.month.toString());
@@ -1328,7 +1436,7 @@ class ApiClient {
 
   async updatePayment(
     id: number | string,
-    payment: Partial<Payment>
+    payment: Partial<Payment>,
   ): Promise<Payment> {
     return this.request<Payment>(`/api/v1/payments/${id}/`, {
       method: "PATCH",
@@ -1345,7 +1453,7 @@ class ApiClient {
   async approvePayment(
     id: number | string,
     action: "approve" | "reject",
-    rejection_reason?: string
+    rejection_reason?: string,
   ): Promise<Payment> {
     return this.request<Payment>(`/api/v1/payments/${id}/approve/`, {
       method: "POST",
@@ -1366,7 +1474,7 @@ class ApiClient {
     if (params?.work_group) queryParams.append("work_group", params.work_group);
     const queryString = queryParams.toString();
     return this.request<PaymentSummary>(
-      `/api/v1/payments/summary/${queryString ? `?${queryString}` : ""}`
+      `/api/v1/payments/summary/${queryString ? `?${queryString}` : ""}`,
     );
   }
 
@@ -1416,11 +1524,17 @@ class ApiClient {
       next: string | null;
       previous: string | null;
       results: TaskAssignmentRequest[];
-    }>(`/api/v1/works/assignment-requests/${queryString ? `?${queryString}` : ""}`);
+    }>(
+      `/api/v1/works/assignment-requests/${queryString ? `?${queryString}` : ""}`,
+    );
   }
 
-  async getAssignmentRequest(id: number | string): Promise<TaskAssignmentRequest> {
-    return this.request<TaskAssignmentRequest>(`/api/v1/works/assignment-requests/${id}/`);
+  async getAssignmentRequest(
+    id: number | string,
+  ): Promise<TaskAssignmentRequest> {
+    return this.request<TaskAssignmentRequest>(
+      `/api/v1/works/assignment-requests/${id}/`,
+    );
   }
 
   async createAssignmentRequest(request: {
@@ -1430,13 +1544,19 @@ class ApiClient {
     requested_value: string;
     reason: string;
   }): Promise<TaskAssignmentRequest> {
-    return this.request<TaskAssignmentRequest>("/api/v1/works/assignment-requests/", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
+    return this.request<TaskAssignmentRequest>(
+      "/api/v1/works/assignment-requests/",
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+      },
+    );
   }
 
-  async approveAssignmentRequest(id: number | string, response_message?: string): Promise<{
+  async approveAssignmentRequest(
+    id: number | string,
+    response_message?: string,
+  ): Promise<{
     status: string;
     message: string;
     request: TaskAssignmentRequest;
@@ -1451,7 +1571,10 @@ class ApiClient {
     });
   }
 
-  async rejectAssignmentRequest(id: number | string, response_message?: string): Promise<{
+  async rejectAssignmentRequest(
+    id: number | string,
+    response_message?: string,
+  ): Promise<{
     status: string;
     message: string;
     request: TaskAssignmentRequest;
@@ -1489,7 +1612,9 @@ class ApiClient {
       next: string | null;
       previous: string | null;
       results: TaskAssignmentRequest[];
-    }>(`/api/v1/works/assignment-requests/my_requests/${queryString ? `?${queryString}` : ""}`);
+    }>(
+      `/api/v1/works/assignment-requests/my_requests/${queryString ? `?${queryString}` : ""}`,
+    );
   }
 
   async getPendingApprovals(params?: {
@@ -1515,7 +1640,9 @@ class ApiClient {
       next: string | null;
       previous: string | null;
       results: TaskAssignmentRequest[];
-    }>(`/api/v1/works/assignment-requests/pending_approvals/${queryString ? `?${queryString}` : ""}`);
+    }>(
+      `/api/v1/works/assignment-requests/pending_approvals/${queryString ? `?${queryString}` : ""}`,
+    );
   }
 
   // Task Notifications API
@@ -1590,12 +1717,12 @@ class ApiClient {
 
   async evaluateWorkTask(
     id: number | string,
-    data: { 
-      rating: number; 
-      comment?: string; 
-      require_redo?: boolean; 
-      redo_reason?: string; 
-    }
+    data: {
+      rating: number;
+      comment?: string;
+      require_redo?: boolean;
+      redo_reason?: string;
+    },
   ): Promise<{
     status: string;
     message: string;
@@ -1772,9 +1899,9 @@ export interface WorkTask {
   work_group: string;
   frequency: string;
   priority: string;
-  assigned_to?: number[];           // Changed to array of IDs
-  assigned_to_names?: string[];     // Changed to array of names
-  assigned_to_ids?: number[];       // New field for explicit IDs
+  assigned_to?: number[]; // Changed to array of IDs
+  assigned_to_names?: string[]; // Changed to array of names
+  assigned_to_ids?: number[]; // New field for explicit IDs
   created_by?: number;
   created_by_name?: string;
   assigned_by?: number;
@@ -1802,12 +1929,15 @@ export interface WorkTask {
   is_on_time?: boolean;
   can_edit_dates?: boolean;
   can_evaluate?: boolean;
-  custom_field_values?: Record<number, {
-    field_id: number;
-    field_name: string;
-    field_type: string;
-    value: any;
-  }>;
+  custom_field_values?: Record<
+    number,
+    {
+      field_id: number;
+      field_name: string;
+      field_type: string;
+      value: any;
+    }
+  >;
   created_at: string;
   updated_at: string;
 }
@@ -1815,7 +1945,19 @@ export interface WorkTask {
 export interface CustomField {
   id: number;
   name: string;
-  field_type: 'text' | 'textarea' | 'number' | 'date' | 'dropdown' | 'checkbox' | 'money' | 'website' | 'email' | 'phone' | 'labels' | 'formula';
+  field_type:
+    | "text"
+    | "textarea"
+    | "number"
+    | "date"
+    | "dropdown"
+    | "checkbox"
+    | "money"
+    | "website"
+    | "email"
+    | "phone"
+    | "labels"
+    | "formula";
   description?: string;
   options?: string[];
   is_required: boolean;
@@ -1860,7 +2002,7 @@ export interface CustomGroup {
 export interface ViewPreference {
   id: number;
   user: number;
-  view_type: 'list' | 'board' | 'calendar' | 'gantt';
+  view_type: "list" | "board" | "calendar" | "gantt";
   config: Record<string, any>;
   is_default: boolean;
   created_at: string;
@@ -2052,12 +2194,19 @@ export interface TaskAssignmentRequest {
   requester_name?: string;
   approver: number;
   approver_name?: string;
-  request_type: 'start_date' | 'due_date' | 'title' | 'description' | 'priority' | 'work_group' | 'other';
+  request_type:
+    | "start_date"
+    | "due_date"
+    | "title"
+    | "description"
+    | "priority"
+    | "work_group"
+    | "other";
   request_type_display?: string;
   current_value?: string;
   requested_value: string;
   reason: string;
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  status: "pending" | "approved" | "rejected" | "cancelled";
   status_display?: string;
   response_message?: string;
   processed_at?: string;
@@ -2075,7 +2224,16 @@ export interface TaskNotification {
   task_title?: string;
   assignment_request?: number;
   assignment_request_id?: number;
-  notification_type: 'task_assigned' | 'task_updated' | 'task_completed' | 'task_overdue' | 'assignment_request' | 'assignment_approved' | 'assignment_rejected' | 'evaluation_received' | 'reminder';
+  notification_type:
+    | "task_assigned"
+    | "task_updated"
+    | "task_completed"
+    | "task_overdue"
+    | "assignment_request"
+    | "assignment_approved"
+    | "assignment_rejected"
+    | "evaluation_received"
+    | "reminder";
   notification_type_display?: string;
   title: string;
   message: string;
@@ -2086,7 +2244,7 @@ export interface TaskNotification {
 }
 
 export interface TaskAssignmentData {
-  assignee_ids: number[];  // Changed to array
+  assignee_ids: number[]; // Changed to array
   supervisor_id?: number;
   start_date?: string;
   due_date?: string;

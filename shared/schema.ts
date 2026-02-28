@@ -691,6 +691,96 @@ export const aiInteractionsRelations = relations(aiInteractions, ({ one }) => ({
 }));
 
 // ============================================================================
+// CLICKUP-LIKE TASKS
+// ============================================================================
+
+export const taskLists = pgTable("task_lists", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdById: varchar("created_by_id").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const tasks = pgTable("tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  listId: varchar("list_id").references(() => taskLists.id),
+  parentId: varchar("parent_id").references((): any => tasks.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  status: taskStatusEnum("status").notNull().default("pending"),
+  priority: priorityEnum("priority").notNull().default("normal"),
+  startDate: timestamp("start_date"),
+  dueDate: timestamp("due_date"),
+  completedDate: timestamp("completed_date"),
+  createdById: varchar("created_by_id").references(() => users.id),
+  relatedWorkId: varchar("related_work_id").references(() => works.id),
+  relatedContractId: varchar("related_contract_id").references(() => contracts.id),
+  customFields: jsonb("custom_fields"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  listIdx: index("task_list_idx").on(table.listId),
+  statusIdx: index("task_status_idx").on(table.status),
+  priorityIdx: index("task_priority_idx").on(table.priority),
+  createdAtIdx: index("task_created_at_idx").on(table.createdAt),
+}));
+
+export const taskAssignees = pgTable("task_assignees", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").notNull().references(() => tasks.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  taskIdx: index("task_assignee_task_idx").on(table.taskId),
+  userIdx: index("task_assignee_user_idx").on(table.userId),
+}));
+
+export const taskWatchers = pgTable("task_watchers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").notNull().references(() => tasks.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  taskIdx: index("task_watcher_task_idx").on(table.taskId),
+  userIdx: index("task_watcher_user_idx").on(table.userId),
+}));
+
+export const taskComments = pgTable("task_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").notNull().references(() => tasks.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  taskIdx: index("task_comment_task_idx").on(table.taskId),
+}));
+
+export const taskDependencies = pgTable("task_dependencies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").notNull().references(() => tasks.id),
+  dependsOnTaskId: varchar("depends_on_task_id").notNull().references(() => tasks.id),
+  type: text("type").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  taskIdx: index("task_dep_task_idx").on(table.taskId),
+  onIdx: index("task_dep_on_idx").on(table.dependsOnTaskId),
+}));
+
+export const savedViews = pgTable("saved_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: varchar("owner_id").references(() => users.id),
+  name: text("name").notNull(),
+  viewType: text("view_type").notNull(),
+  filters: jsonb("filters"),
+  sort: jsonb("sort"),
+  groupBy: text("group_by"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ============================================================================
 // ZOD SCHEMAS
 // ============================================================================
 
@@ -823,6 +913,40 @@ export const insertAIInteractionSchema = createInsertSchema(aiInteractions).omit
 
 export const selectAIInteractionSchema = createSelectSchema(aiInteractions);
 
+export const insertTaskListSchema = createInsertSchema(taskLists, {
+  name: z.string().min(1),
+}).omit({ id: true, createdAt: true, updatedAt: true });
+
+export const selectTaskListSchema = createSelectSchema(taskLists);
+
+export const insertTaskSchema = createInsertSchema(tasks, {
+  name: z.string().min(1),
+}).omit({ id: true, createdAt: true, updatedAt: true, completedDate: true });
+
+export const selectTaskSchema = createSelectSchema(tasks);
+
+export const insertTaskAssigneeSchema = createInsertSchema(taskAssignees).omit({ id: true, createdAt: true });
+export const selectTaskAssigneeSchema = createSelectSchema(taskAssignees);
+
+export const insertTaskWatcherSchema = createInsertSchema(taskWatchers).omit({ id: true, createdAt: true });
+export const selectTaskWatcherSchema = createSelectSchema(taskWatchers);
+
+export const insertTaskCommentSchema = createInsertSchema(taskComments, {
+  content: z.string().min(1),
+}).omit({ id: true, createdAt: true });
+export const selectTaskCommentSchema = createSelectSchema(taskComments);
+
+export const insertTaskDependencySchema = createInsertSchema(taskDependencies, {
+  type: z.string().min(1),
+}).omit({ id: true, createdAt: true });
+export const selectTaskDependencySchema = createSelectSchema(taskDependencies);
+
+export const insertSavedViewSchema = createInsertSchema(savedViews, {
+  name: z.string().min(1),
+  viewType: z.string().min(1),
+}).omit({ id: true, createdAt: true, updatedAt: true });
+export const selectSavedViewSchema = createSelectSchema(savedViews);
+
 // ============================================================================
 // TYPE EXPORTS
 // ============================================================================
@@ -876,6 +1000,20 @@ export type InsertWorkflowAuditLog = z.infer<typeof insertWorkflowAuditLogSchema
 export type AIInteraction = typeof aiInteractions.$inferSelect;
 export type InsertAIInteraction = z.infer<typeof insertAIInteractionSchema>;
 
+export type TaskList = typeof taskLists.$inferSelect;
+export type InsertTaskList = z.infer<typeof insertTaskListSchema>;
+export type Task = typeof tasks.$inferSelect;
+export type InsertTask = z.infer<typeof insertTaskSchema>;
+export type TaskAssignee = typeof taskAssignees.$inferSelect;
+export type InsertTaskAssignee = z.infer<typeof insertTaskAssigneeSchema>;
+export type TaskWatcher = typeof taskWatchers.$inferSelect;
+export type InsertTaskWatcher = z.infer<typeof insertTaskWatcherSchema>;
+export type TaskComment = typeof taskComments.$inferSelect;
+export type InsertTaskComment = z.infer<typeof insertTaskCommentSchema>;
+export type TaskDependency = typeof taskDependencies.$inferSelect;
+export type InsertTaskDependency = z.infer<typeof insertTaskDependencySchema>;
+export type SavedView = typeof savedViews.$inferSelect;
+export type InsertSavedView = z.infer<typeof insertSavedViewSchema>;
 // ============================================================================
 // UPDATE/PATCH SCHEMAS (partial schemas for safe updates)
 // ============================================================================
@@ -889,3 +1027,6 @@ export const updateReviewSchema = insertReviewSchema.partial();
 export const updateReviewCouncilSchema = insertReviewCouncilSchema.partial();
 export const updateEditingTaskSchema = insertEditingTaskSchema.partial();
 export const updateAdministrativeTaskSchema = insertAdministrativeTaskSchema.partial();
+export const updateTaskListSchema = insertTaskListSchema.partial();
+export const updateTaskSchema = insertTaskSchema.partial();
+export const updateSavedViewSchema = insertSavedViewSchema.partial();

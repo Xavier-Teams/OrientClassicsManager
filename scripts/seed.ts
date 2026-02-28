@@ -708,6 +708,85 @@ async function seed() {
     console.log("✅ Created administrative tasks\n");
 
     // ============================================================================
+    // 9. CLICKUP-LIKE TASK LISTS, TASKS, SAVED VIEWS
+    // ============================================================================
+    console.log("🗂️ Creating task lists, tasks and default views...");
+
+    const [defaultList] = await db.insert(schema.taskLists).values({
+      name: "Danh sách mặc định",
+      description: "Nhiệm vụ chung cho dự án",
+      createdById: thuKy1.id,
+    }).returning();
+
+    const createdTasks = await db.insert(schema.tasks).values([
+      {
+        listId: defaultList.id,
+        name: "Lập kế hoạch biên tập Luận Ngữ",
+        description: "Chuẩn bị checklist biên tập, phân công BTV",
+        status: "pending",
+        priority: "normal",
+        dueDate: new Date("2024-05-15"),
+        createdById: thuKy1.id,
+        relatedWorkId: work2.id,
+      },
+      {
+        listId: defaultList.id,
+        name: "Theo dõi KTTĐ Mạnh Tử",
+        description: "Kiểm tra báo cáo tiến độ và đôn đốc",
+        status: "in_progress",
+        priority: "high",
+        dueDate: new Date("2024-05-10"),
+        createdById: thuKy1.id,
+        relatedWorkId: work4.id,
+      },
+      {
+        listId: defaultList.id,
+        name: "Chuẩn bị hồ sơ cấp phép xuất bản Luận Ngữ",
+        description: "Tổng hợp tài liệu để xin giấy phép",
+        status: "pending",
+        priority: "normal",
+        dueDate: new Date("2024-05-25"),
+        createdById: truongBan.id,
+        relatedWorkId: work2.id,
+      },
+    ]).returning();
+
+    await db.insert(schema.taskAssignees).values([
+      { taskId: createdTasks[0].id, userId: btv1.id },
+      { taskId: createdTasks[1].id, userId: thuKy1.id },
+      { taskId: createdTasks[2].id, userId: users.find(u => u.role === "van_phong")!.id },
+    ]);
+
+    await db.insert(schema.savedViews).values([
+      {
+        ownerId: thuKy1.id,
+        name: "Board theo trạng thái",
+        viewType: "board",
+        groupBy: "status",
+        filters: { listId: defaultList.id },
+        sort: { by: "updatedAt", order: "desc" } as any,
+      },
+      {
+        ownerId: thuKy1.id,
+        name: "List theo mức ưu tiên",
+        viewType: "list",
+        groupBy: "priority",
+        filters: { listId: defaultList.id },
+        sort: { by: "priority", order: "desc" } as any,
+      },
+      {
+        ownerId: thuKy1.id,
+        name: "Calendar theo hạn",
+        viewType: "calendar",
+        groupBy: "dueDate",
+        filters: { listId: defaultList.id },
+        sort: { by: "dueDate", order: "asc" } as any,
+      },
+    ]);
+
+    console.log("✅ Created task lists, tasks and default saved views\n");
+
+    // ============================================================================
     // SUMMARY
     // ============================================================================
     console.log("=".repeat(60));
